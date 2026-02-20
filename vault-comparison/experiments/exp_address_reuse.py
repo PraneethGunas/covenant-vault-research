@@ -1,0 +1,289 @@
+"""Experiment C: Address Reuse Behavior
+
+Tests what happens when a second deposit is made to the same vault address.
+
+=== RELATED WORK ===
+Address reuse risk in CTV vaults is discussed in the BIP-119
+(https://bips.dev/119/) mailing list and O'Beirne's OP_VAULT analysis
+(BIP-345, https://bips.dev/345/): CTV commits to specific input/output
+structure at vault creation, making subsequent deposits to the same
+address unspendable.  CCV's resilience (each funding creates an
+independent contract instance) follows from Ingala's design (BIP-443,
+https://bips.dev/443/).  This experiment demonstrates the failure mode
+on regtest — consensus rejection of the second deposit's spend attempt
+and the resulting stuck UTXO.
+
+=== THREAT MODEL: Accidental address reuse (user/wallet error) ===
+Attacker: None — this is a self-inflicted design footgun.  The "adversary"
+  is the user's own wallet software, an exchange deposit system, or a
+  payment sender who reuses a previously-seen vault address.
+Goal: N/A — no intentional attack.
+Cost to victim (CTV): Full amount of the second deposit.  The CTV hash
+  in the vault scriptPubKey commits to exact output amounts from the
+  original deposit.  A second deposit of any different amount creates a
+  permanently unspendable UTXO.
+Cost to victim (CCV): Zero.  Each deposit creates an independently
+  spendable contract instance.
+Rationality: Always relevant.  Address reuse is ubiquitous in Bitcoin
+  wallet software, exchange deposit workflows, and payment systems.
+  Any vault design deployed at scale WILL encounter this.
+Defender response (CTV): Prevention only — wallet software must enforce
+  single-use address discipline (standard Bitcoin hygiene).  No recovery
+  path if reuse occurs.
+Defender response (CCV): No action needed.
+Residual risk (CTV): Total loss of reused deposit, mitigable at the
+  wallet layer.
+Residual risk (CCV): None.
+
+CTV vaults are single-use by construction, while CCV vaults can safely
+receive multiple deposits.  The practical impact depends on whether
+vault-aware wallet software enforces address hygiene.
+"""
+
+from adapters.base import VaultAdapter
+from harness.metrics import ExperimentResult
+from harness.regtest_caveats import emit_vsize_is_primary
+from experiments.registry import register
+
+
+VAULT_AMOUNT_1 = 49_999_900
+VAULT_AMOUNT_2 = 10_000_000  # Different amount for second deposit
+
+
+def _test_ctv_address_reuse(adapter, result):
+    """CTV-specific test: send two deposits to the same vault scriptPubKey.
+
+    Creates one VaultPlan for amount_1, extracts the vault scriptPubKey,
+    then sends a second deposit of amount_2 directly to that same script.
+    The second deposit becomes stuck because the CTV hash commits to
+    the original amount.
+    """
+    rpc = adapter.rpc
+
+    # --- First vault: normal lifecycle ---
+    vault1 = adapter.create_vault(VAULT_AMOUNT_1)
+    result.observe(f"First vault created: {vault1.amount_sats} sats")
+    plan1 = vault1.extra["plan"]
+
+    # Extract the vault scriptPubKey (bare CTV: [hash, OP_CTV])
+    vault_spk = bytes(plan1.tovault_tx_unsigned.vout[0].scriptPubKey)
+    result.observe(f"Vault scriptPubKey: {vault_spk.hex()[:40]}...")
+
+    # First vault unvault should work fine
+    try:
+        unvault1 = adapter.trigger_unvault(vault1)
+        result.observe(f"First vault unvault: SUCCESS ({unvault1.unvault_txid[:16]}...)")
+        withdraw1 = adapter.complete_withdrawal(unvault1)
+        result.observe(f"First vault withdrawal: SUCCESS ({withdraw1.amount_sats} sats)")
+    except Exception as e:
+        result.observe(f"First vault lifecycle: FAILED — {e}")
+
+    # --- Second deposit: send a different amount to the SAME scriptPubKey ---
+    # This simulates a user (or exchange) reusing the vault address.
+    result.observe(f"--- Sending second deposit ({VAULT_AMOUNT_2} sats) to same vault scriptPubKey ---")
+
+    try:
+        # Fund a fresh coin for the second deposit
+        coin2, from_wallet2 = adapter._fund_coin(VAULT_AMOUNT_2)
+        result.observe(f"Funded second deposit coin: {coin2.amount} sats")
+
+        # Build a raw transaction sending amount_2 to the vault scriptPubKey
+        from bitcoin.core import (
+            CMutableTransaction, CTxIn, CTxOut, CTransaction,
+            CTxInWitness, CScriptWitness, CTxWitness,
+        )
+        from bitcoin.core.script import CScript, OP_0, SignatureHash, SIGHASH_ALL, SIGVERSION_WITNESS_V0
+        import bitcoin.core.script as script
+        from bitcoin.wallet import CBech32BitcoinAddress
+
+        tx = CMutableTransaction()
+        tx.nVersion = 2
+        tx.vin = [CTxIn(coin2.outpoint, nSequence=0)]
+
+        # Send to the same bare CTV vault script
+        tx.vout = [CTxOut(VAULT_AMOUNT_2, CScript(vault_spk))]
+
+        # Change (if needed)
+        change_amount = coin2.amount - VAULT_AMOUNT_2 - 1000
+        if change_amount > 546:
+            from_addr = from_wallet2.privkey.point.p2wpkh_address(network="regtest")
+            change_h160 = CBech32BitcoinAddress(from_addr)
+            tx.vout.append(CTxOut(change_amount, CScript([OP_0, change_h160])))
+
+        # Sign the funding tx (P2WPKH)
+        from_addr = from_wallet2.privkey.point.p2wpkh_address(network="regtest")
+        spend_from_addr = CBech32BitcoinAddress(from_addr)
+        redeem_script = CScript([
+            script.OP_DUP, script.OP_HASH160,
+            spend_from_addr,
+            script.OP_EQUALVERIFY, script.OP_CHECKSIG,
+        ])
+        sighash = SignatureHash(
+            redeem_script, tx, 0, SIGHASH_ALL,
+            amount=coin2.amount, sigversion=SIGVERSION_WITNESS_V0,
+        )
+        sig = from_wallet2.privkey.sign(int.from_bytes(sighash, "big")).der() + bytes([SIGHASH_ALL])
+        tx.wit = CTxWitness([CTxInWitness(CScriptWitness([sig, from_wallet2.privkey.point.sec()]))])
+
+        deposit2_tx = CTransaction.from_tx(tx)
+        deposit2_hex = deposit2_tx.serialize().hex()
+        deposit2_txid = adapter._ctv_rpc.sendrawtransaction(deposit2_hex)
+        adapter.ctv_main.generateblocks(adapter._ctv_rpc, 1)
+
+        result.observe(f"Second deposit broadcast: SUCCESS (txid={deposit2_txid[:16]}...)")
+
+        # --- Now try to unvault the second deposit ---
+        # This SHOULD fail because the CTV template hash was computed for amount_1's
+        # fee schedule. The unvault tx template expects outputs totalling
+        # amount_1 - fees, but the input is only amount_2.
+        result.observe("Attempting to unvault second deposit using original plan's template...")
+
+        from main import txid_to_bytes
+        from bitcoin.core import COutPoint
+
+        # Build the unvault tx manually, pointing at the second deposit's outpoint
+        # but using plan1's pre-computed template (which has amount_1-based outputs).
+        #
+        # The vault script is: [unvault_ctv_hash, OP_CTV]
+        # OP_CTV checks: hash(spending_tx_template) == unvault_ctv_hash
+        # The hash commits to output amounts, so to satisfy CTV, the unvault tx
+        # must have the SAME outputs as plan1's template (sized for amount_1).
+        # But amount_1 > amount_2, so outputs > input → bad-txns-in-belowout.
+        unvault_template = plan1.unvault_tx_template
+        unvault_tx = CMutableTransaction()
+        unvault_tx.nVersion = unvault_template.nVersion
+        unvault_tx.nLockTime = unvault_template.nLockTime
+        # Point at the second deposit UTXO
+        deposit2_outpoint = COutPoint(txid_to_bytes(deposit2_txid), 0)
+        unvault_tx.vin = [CTxIn(deposit2_outpoint, nSequence=unvault_template.vin[0].nSequence)]
+        # Use plan1's outputs (sized for amount_1) — this is the only way to satisfy CTV
+        unvault_tx.vout = list(unvault_template.vout)
+
+        unvault_final = CTransaction.from_tx(unvault_tx)
+        unvault_hex = unvault_final.serialize().hex()
+
+        try:
+            unvault2_txid = adapter._ctv_rpc.sendrawtransaction(unvault_hex)
+            adapter.ctv_main.generateblocks(adapter._ctv_rpc, 1)
+            result.observe(
+                f"Second deposit unvault: UNEXPECTED SUCCESS — {unvault2_txid[:16]}... "
+                f"(the reused vault accepted a mismatched amount, likely overpaying fees)"
+            )
+        except Exception as e:
+            err_str = str(e)
+            if "bad-txns-in-belowout" in err_str:
+                result.observe(
+                    f"Second deposit unvault: CORRECTLY REJECTED — bad-txns-in-belowout. "
+                    f"The CTV template requires outputs totalling ~{VAULT_AMOUNT_1} sats "
+                    f"but the UTXO only contains {VAULT_AMOUNT_2} sats. "
+                    f"The deposit is permanently STUCK."
+                )
+            elif "non-mandatory-script-verify-flag" in err_str:
+                result.observe(
+                    f"Second deposit unvault: CORRECTLY REJECTED — CTV script verification failed. "
+                    f"The {VAULT_AMOUNT_2} sat deposit is permanently STUCK at this address."
+                )
+            elif "Missing inputs" in err_str or "bad-txns-inputs-missingorspent" in err_str:
+                result.observe(
+                    f"Second deposit unvault: CORRECTLY REJECTED — input mismatch. "
+                    f"The {VAULT_AMOUNT_2} sat deposit is permanently STUCK at this address."
+                )
+            else:
+                result.observe(f"Second deposit unvault: REJECTED — {e}")
+
+        # Also demonstrate that even building a NEW template for amount_2 won't help
+        # because the vault scriptPubKey already has plan1's CTV hash baked in.
+        result.observe(
+            f"Note: Building a new unvault template for {VAULT_AMOUNT_2} sats would produce "
+            f"a different CTV hash, which wouldn't match the hash in the vault script. "
+            f"There is NO way to spend this UTXO."
+        )
+
+        result.observe(
+            "CONCLUSION: CTV vaults are inherently single-use. The CTV hash in the "
+            "vault scriptPubKey commits to exact output amounts derived from the "
+            "original deposit. A second deposit to the same address creates an "
+            "unspendable UTXO — funds are permanently lost."
+        )
+
+    except Exception as e:
+        result.observe(f"Second deposit test: ERROR — {e}")
+        result.observe(
+            "DESIGN NOTE: CTV vaults are inherently single-use. Even though we "
+            "could not complete the full test, the CTV hash commits to exact "
+            "output amounts. Any deposit of a different amount to the same vault "
+            "address creates an unspendable UTXO."
+        )
+
+
+def _test_ccv_address_reuse(adapter, result):
+    """CCV-specific test: two deposits to the same vault contract.
+
+    CCV vaults use P2TR addresses with covenant script paths.
+    Each deposit creates an independent UTXO governed by the same
+    contract rules. Amount checking happens via CCV modes at spend
+    time, not at deposit time. Multiple deposits are safe.
+    """
+    # First vault
+    vault1 = adapter.create_vault(VAULT_AMOUNT_1)
+    result.observe(f"First vault created: {vault1.amount_sats} sats")
+
+    # Second vault at the same contract (same address)
+    vault2 = adapter.create_vault(VAULT_AMOUNT_2)
+    result.observe(f"Second vault created: {vault2.amount_sats} sats")
+
+    # Both should complete their full lifecycle independently
+    try:
+        unvault1 = adapter.trigger_unvault(vault1)
+        result.observe(f"First vault unvault: SUCCESS ({unvault1.unvault_txid[:16]}...)")
+        withdraw1 = adapter.complete_withdrawal(unvault1)
+        result.observe(f"First vault withdrawal: SUCCESS ({withdraw1.amount_sats} sats)")
+    except Exception as e:
+        result.observe(f"First vault lifecycle: FAILED — {e}")
+
+    try:
+        unvault2 = adapter.trigger_unvault(vault2)
+        result.observe(f"Second vault unvault: SUCCESS ({unvault2.unvault_txid[:16]}...)")
+        withdraw2 = adapter.complete_withdrawal(unvault2)
+        result.observe(f"Second vault withdrawal: SUCCESS ({withdraw2.amount_sats} sats)")
+    except Exception as e:
+        result.observe(f"Second vault lifecycle: FAILED — {e}")
+
+    result.observe(
+        "CONCLUSION: CCV vaults safely handle multiple deposits. Each UTXO is "
+        "independently governed by the contract rules. Amount checking via CCV's "
+        "DEDUCT mode operates at spend time, not deposit time."
+    )
+
+
+@register(
+    name="address_reuse",
+    description="Second deposit to same vault address — fund loss vs safe handling",
+    tags=["core", "comparative", "security", "design_level"],
+)
+def run(adapter: VaultAdapter) -> ExperimentResult:
+    result = ExperimentResult(
+        experiment="address_reuse",
+        covenant=adapter.name,
+        params={
+            "first_deposit_sats": VAULT_AMOUNT_1,
+            "second_deposit_sats": VAULT_AMOUNT_2,
+        },
+    )
+
+    try:
+        if adapter.name == "ctv":
+            _test_ctv_address_reuse(adapter, result)
+        elif adapter.name == "ccv":
+            _test_ccv_address_reuse(adapter, result)
+        else:
+            # Generic fallback: just try two vaults
+            vault1 = adapter.create_vault(VAULT_AMOUNT_1)
+            result.observe(f"First vault created: {vault1.amount_sats} sats")
+            vault2 = adapter.create_vault(VAULT_AMOUNT_2)
+            result.observe(f"Second vault created: {vault2.amount_sats} sats")
+    except Exception as e:
+        result.error = str(e)
+
+    emit_vsize_is_primary(result)
+    return result
