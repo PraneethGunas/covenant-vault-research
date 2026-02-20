@@ -1,0 +1,43 @@
+# === Upstream cloned repos (have their own git history) ===
+simple-op-vault/
+simple-ctv-vault/
+pymatt/
+bitcoin-inquisition/
+bitcoin-opvault/
+
+# === Agent / session files ===
+agent.md
+memory/
+vault-comparison/CLAUDE.md
+vault-comparison/opvault-demo.log
+
+# === Review / process docs (not part of the research output) ===
+PEER_REVIEW_vault_comparison.md
+
+# === Generated outputs (reproducible from source) ===
+fee_sensitivity_analysis.md
+fee_sensitivity_chart.html
+vault-comparison/fee_sensitivity_analysis.md
+vault-comparison/fee_sensitivity_chart.html
+vault-comparison/results/
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.venv/
+venv/
+*.lock
+
+# === Editor / OS ===
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
