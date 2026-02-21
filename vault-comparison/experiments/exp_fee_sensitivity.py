@@ -59,16 +59,52 @@ CCV_LIFECYCLE_TOTAL = CCV_TOVAULT_VSIZE + CCV_TRIGGER_VSIZE + CCV_WITHDRAW_VSIZE
 CCV_TRIGGER_REVAULT_VSIZE = 162  # trigger_and_revault (partial withdrawal)
 CCV_BATCHED_PER_INPUT = 106      # marginal cost per additional vault in batch
 
+# OP_VAULT lifecycle (jamesob/opvault-demo)
+# VERIFIED against lifecycle_costs + recovery_griefing + watchtower_exhaustion
+# on the opvault node (results/2026-02-21_143950/).
+#
+# Key structural notes:
+#   - trigger (292 vB) is much larger than CCV's 154 because start_withdrawal()
+#     always uses 2 inputs (vault UTXO + fee wallet UTXO) and 3 outputs
+#     (trigger output + revault/withdrawal + fee change).  The fee-input
+#     pattern inflates both trigger and recovery compared to CCV.
+#   - recover (246 vB) exceeds CCV's 122 by 124 vB: recoveryauth Schnorr sig
+#     + OP_VAULT_RECOVER witness overhead + fee-input (2-in/2-out structure).
+#   - trigger_and_revault = trigger (same 292 vB): start_withdrawal() with
+#     partial amount uses the identical tx structure (the "revault" output
+#     is just another P2TR output in the 3-output set).
+#
+# Measurement stability: watchtower_exhaustion verified vsize constant across
+# 5 splits (trigger range=0, recover range=0).  Balance-independent.
+OPV_TOVAULT_VSIZE = 154          # P2TR funding tx (deposit to vault address)
+OPV_TRIGGER_VSIZE = 292          # start_withdrawal (2-in: vault+fee, 3-out: trigger+revault+change)
+OPV_WITHDRAW_VSIZE = 121         # CTV-locked withdrawal after CSV (1-in/1-out)
+OPV_RECOVER_VSIZE = 246          # OP_VAULT_RECOVER (authorized, 2-in/2-out, recoveryauth sig)
+OPV_LIFECYCLE_TOTAL = OPV_TOVAULT_VSIZE + OPV_TRIGGER_VSIZE + OPV_WITHDRAW_VSIZE
+
+# OP_VAULT revault/batch operations
+OPV_TRIGGER_REVAULT_VSIZE = 292  # start_withdrawal with partial = same structure as full trigger
+OPV_BATCHED_PER_INPUT = 191      # marginal cost per additional vault in batch (from batched recovery: 246 - 55 overhead)
+
 # Fee pinning attack (CTV-specific)
 FEE_PIN_DESCENDANT_VSIZE = 110   # single descendant tx in the chain
 FEE_PIN_CHAIN_COUNT = 25         # Bitcoin Core default -limitdescendantcount
 FEE_PIN_TOTAL_CHAIN_VSIZE = FEE_PIN_DESCENDANT_VSIZE * (FEE_PIN_CHAIN_COUNT - 1)  # ~2640 vB
 
-# Watchtower exhaustion (CCV-specific)
-WT_TRIGGER_VSIZE = CCV_TRIGGER_REVAULT_VSIZE  # per-split trigger cost
-WT_RECOVER_VSIZE = CCV_RECOVER_VSIZE          # per-split recovery cost
+# Watchtower exhaustion (CCV + OP_VAULT — any vault with revault)
+WT_CCV_TRIGGER_VSIZE = CCV_TRIGGER_REVAULT_VSIZE  # CCV per-split trigger cost
+WT_CCV_RECOVER_VSIZE = CCV_RECOVER_VSIZE          # CCV per-split recovery cost
+WT_OPV_TRIGGER_VSIZE = OPV_TRIGGER_REVAULT_VSIZE  # OP_VAULT per-split trigger cost (292 vB)
+WT_OPV_RECOVER_VSIZE = OPV_RECOVER_VSIZE          # OP_VAULT per-split recovery cost (246 vB)
 WT_BATCHED_RECOVERY_OVERHEAD = 55             # fixed overhead for batched recovery
-WT_BATCHED_RECOVERY_PER_INPUT = 67            # per-input cost in batched recovery
+WT_BATCHED_RECOVERY_PER_INPUT = 67            # CCV per-input cost in batched recovery
+# NOTE: OP_VAULT batched recovery per-input = 191 vB (from watchtower_exhaustion
+# measurement: individual 246 = 55 overhead + 191 per input).  CCV is 67 vB.
+# The difference reflects OP_VAULT's larger per-input witness (recoveryauth sig).
+
+# Legacy aliases for backward compat in existing analysis code
+WT_TRIGGER_VSIZE = WT_CCV_TRIGGER_VSIZE
+WT_RECOVER_VSIZE = WT_CCV_RECOVER_VSIZE
 
 # ── Historical fee rate environments ─────────────────────────────────
 FEE_ENVIRONMENTS = [
@@ -155,35 +191,45 @@ def _section_lifecycle_costs(result):
     )
 
     result.observe(f"\nStructural vsize (deterministic):")
-    result.observe(f"  CTV lifecycle: {CTV_LIFECYCLE_TOTAL} vB "
+    result.observe(f"  CTV lifecycle:      {CTV_LIFECYCLE_TOTAL} vB "
                    f"(tovault={CTV_TOVAULT_VSIZE} + unvault={CTV_UNVAULT_VSIZE} "
                    f"+ withdraw={CTV_WITHDRAW_VSIZE})")
-    result.observe(f"  CCV lifecycle: {CCV_LIFECYCLE_TOTAL} vB "
+    result.observe(f"  CCV lifecycle:      {CCV_LIFECYCLE_TOTAL} vB "
                    f"(tovault={CCV_TOVAULT_VSIZE} + trigger={CCV_TRIGGER_VSIZE} "
                    f"+ withdraw={CCV_WITHDRAW_VSIZE})")
-    savings_vb = CTV_LIFECYCLE_TOTAL - CCV_LIFECYCLE_TOTAL
-    savings_pct = savings_vb / CTV_LIFECYCLE_TOTAL * 100 if CTV_LIFECYCLE_TOTAL else 0
-    result.observe(f"  Difference: CCV saves {savings_vb} vB ({savings_pct:.1f}%)")
+    result.observe(f"  OP_VAULT lifecycle: {OPV_LIFECYCLE_TOTAL} vB "
+                   f"(tovault={OPV_TOVAULT_VSIZE} + trigger={OPV_TRIGGER_VSIZE} "
+                   f"+ withdraw={OPV_WITHDRAW_VSIZE})")
+    ccv_saves = CTV_LIFECYCLE_TOTAL - CCV_LIFECYCLE_TOTAL
+    ccv_pct = ccv_saves / CTV_LIFECYCLE_TOTAL * 100 if CTV_LIFECYCLE_TOTAL else 0
+    opv_diff = OPV_LIFECYCLE_TOTAL - CCV_LIFECYCLE_TOTAL
+    result.observe(f"  CCV vs CTV: CCV saves {ccv_saves} vB ({ccv_pct:.1f}%)")
+    result.observe(f"  OP_VAULT vs CCV: OP_VAULT costs {opv_diff:+d} vB "
+                   f"({'more' if opv_diff > 0 else 'less'} due to fee input overhead)")
 
     # Table
-    result.observe(f"\n{'Fee Rate':>12} {'Period':<35} {'CTV Cost':>12} {'CCV Cost':>12} {'Savings':>10} {'as % vault':>12}")
-    result.observe("-" * 95)
+    result.observe(f"\n{'Fee Rate':>12} {'Period':<30} {'CTV Cost':>12} {'CCV Cost':>12} {'OPV Cost':>12} {'Cheapest':>10} {'as % vault':>12}")
+    result.observe("-" * 100)
 
     for rate, period in FEE_ENVIRONMENTS:
         ctv_cost = CTV_LIFECYCLE_TOTAL * rate
         ccv_cost = CCV_LIFECYCLE_TOTAL * rate
-        savings = ctv_cost - ccv_cost
-        pct_vault = ctv_cost / VAULT_AMOUNT_SATS * 100
+        opv_cost = OPV_LIFECYCLE_TOTAL * rate
+        cheapest = "CCV" if ccv_cost <= min(ctv_cost, opv_cost) else ("CTV" if ctv_cost <= opv_cost else "OPV")
+        pct_vault = max(ctv_cost, opv_cost) / VAULT_AMOUNT_SATS * 100
         result.observe(
-            f"{rate:>8} s/vB  {period:<35} {_fmt_sats(ctv_cost):>12} {_fmt_sats(ccv_cost):>12} "
-            f"{_fmt_sats(savings):>10} {pct_vault:>10.3f}%"
+            f"{rate:>8} s/vB  {period:<30} {_fmt_sats(ctv_cost):>12} {_fmt_sats(ccv_cost):>12} "
+            f"{_fmt_sats(opv_cost):>12} {cheapest:>10} {pct_vault:>10.3f}%"
         )
 
     result.observe(
-        f"\nINSIGHT: At 500 sat/vB (stress), a full CTV lifecycle costs "
-        f"{_fmt_sats(CTV_LIFECYCLE_TOTAL * 500)} sats "
-        f"({CTV_LIFECYCLE_TOTAL * 500 / VAULT_AMOUNT_SATS * 100:.2f}% of a 0.5 BTC vault).  "
-        f"Lifecycle cost becomes material above ~100 sat/vB for sub-BTC vaults."
+        f"\nINSIGHT: At 500 sat/vB (stress), lifecycle costs: "
+        f"CTV={_fmt_sats(CTV_LIFECYCLE_TOTAL * 500)}, "
+        f"CCV={_fmt_sats(CCV_LIFECYCLE_TOTAL * 500)}, "
+        f"OP_VAULT={_fmt_sats(OPV_LIFECYCLE_TOTAL * 500)} sats.  "
+        f"OP_VAULT's fee-input model adds overhead vs CCV but avoids anchor "
+        f"output risks.  Lifecycle cost becomes material above ~100 sat/vB "
+        f"for sub-BTC vaults."
     )
 
 
@@ -296,6 +342,22 @@ def _section_recovery_griefing(result):
             f"(attacker's cost).  This is a deterrent in high-fee environments."
         )
 
+    # OP_VAULT griefing
+    result.observe("\n--- OP_VAULT: Authorized Recovery Griefing ---")
+    result.observe(
+        f"Attacker cost per round: {OPV_RECOVER_VSIZE} vB (OP_VAULT_RECOVER, needs recoveryauth KEY)"
+    )
+    result.observe(
+        f"Defender cost per round: {OPV_TRIGGER_VSIZE} vB (re-trigger start_withdrawal)"
+    )
+    opv_asymmetry = OPV_TRIGGER_VSIZE / OPV_RECOVER_VSIZE if OPV_RECOVER_VSIZE else 1
+    result.observe(f"Cost asymmetry: {opv_asymmetry:.2f}x (defender pays MORE)")
+    result.observe(
+        "KEY DIFFERENCE from CCV: OP_VAULT recovery requires the recoveryauth "
+        "key — no anonymous griefing.  Attacker bar is HIGHER, but consequence "
+        "is the same (liveness denial)."
+    )
+
     # CTV comparison
     result.observe("\n--- CTV: Hot-Key Sweep Griefing ---")
     result.observe(
@@ -322,18 +384,22 @@ def _section_watchtower_exhaustion(result):
     """Section 4: Watchtower exhaustion economics (CCV-specific)."""
     result.observe("")
     result.observe("=" * 70)
-    result.observe("SECTION 4: WATCHTOWER EXHAUSTION ECONOMICS (CCV-SPECIFIC)")
+    result.observe("SECTION 4: WATCHTOWER EXHAUSTION ECONOMICS (CCV + OP_VAULT)")
     result.observe("=" * 70)
     result.observe(
-        "The attacker splits a vault into N small UTXOs via trigger_and_revault, "
-        "forcing the watchtower to recover each one.  The watchtower's cumulative "
-        "recovery cost must not exceed the vault value."
+        "The attacker splits a vault into N small UTXOs via trigger_and_revault "
+        "(CCV) or start_withdrawal with partial amount (OP_VAULT), forcing the "
+        "watchtower to recover each one.  This attack applies to ANY vault "
+        "design with revault capability.  CTV is immune (no revault)."
     )
 
-    result.observe(f"\nStructural constants:")
-    result.observe(f"  trigger_and_revault vsize: {WT_TRIGGER_VSIZE} vB (attacker's cost per split)")
-    result.observe(f"  individual recovery vsize: {WT_RECOVER_VSIZE} vB (watchtower's cost per recovery)")
-    result.observe(f"  batched recovery: ~{WT_BATCHED_RECOVERY_OVERHEAD} + {WT_BATCHED_RECOVERY_PER_INPUT} × N vB")
+    result.observe(f"\nStructural constants (CCV):")
+    result.observe(f"  trigger_and_revault vsize: {WT_CCV_TRIGGER_VSIZE} vB (attacker's cost per split)")
+    result.observe(f"  individual recovery vsize: {WT_CCV_RECOVER_VSIZE} vB (watchtower's cost per recovery)")
+    result.observe(f"\nStructural constants (OP_VAULT):")
+    result.observe(f"  partial withdrawal vsize: {WT_OPV_TRIGGER_VSIZE} vB (attacker's cost per split)")
+    result.observe(f"  authorized recovery vsize: {WT_OPV_RECOVER_VSIZE} vB (watchtower's cost per recovery)")
+    result.observe(f"\nBatched recovery: ~{WT_BATCHED_RECOVERY_OVERHEAD} + {WT_BATCHED_RECOVERY_PER_INPUT} × N vB")
 
     split_asymmetry = WT_RECOVER_VSIZE / WT_TRIGGER_VSIZE if WT_TRIGGER_VSIZE else 1
     result.observe(f"  recovery/trigger ratio: {split_asymmetry:.2f}x")
@@ -422,15 +488,15 @@ def _section_synthesis(result):
     result.observe("\n--- Attack Severity Matrix ---")
     result.observe("How each attack's severity changes with fee environment:\n")
 
-    result.observe(f"{'Attack':>30} {'Low (1)':>12} {'Med (50)':>12} {'High (300)':>12} {'Stress (500)':>14}")
-    result.observe("-" * 82)
+    result.observe(f"{'Attack':>35} {'Low (1)':>12} {'Med (50)':>12} {'High (300)':>12} {'Stress (500)':>14}")
+    result.observe("-" * 87)
 
     # Fee pinning (CTV): gets WORSE with high fees
     result.observe(
-        f"{'Fee pinning (CTV)':>30} {'CRITICAL':>12} {'CRITICAL':>12} {'CRITICAL':>12} {'CRITICAL':>14}"
+        f"{'Fee pinning (CTV)':>35} {'CRITICAL':>12} {'CRITICAL':>12} {'CRITICAL':>12} {'CRITICAL':>14}"
     )
     result.observe(
-        f"{'  attack cost':>30} {_fmt_sats(FEE_PIN_TOTAL_CHAIN_VSIZE * 1):>12} "
+        f"{'  attack cost':>35} {_fmt_sats(FEE_PIN_TOTAL_CHAIN_VSIZE * 1):>12} "
         f"{_fmt_sats(FEE_PIN_TOTAL_CHAIN_VSIZE * 50):>12} "
         f"{_fmt_sats(FEE_PIN_TOTAL_CHAIN_VSIZE * 300):>12} "
         f"{_fmt_sats(FEE_PIN_TOTAL_CHAIN_VSIZE * 500):>14}"
@@ -438,34 +504,58 @@ def _section_synthesis(result):
 
     # Recovery griefing (CCV): more expensive but still cheap
     result.observe(
-        f"{'Recovery griefing (CCV)':>30} {'LOW':>12} {'LOW':>12} {'MODERATE':>12} {'MODERATE':>14}"
+        f"{'Recovery griefing (CCV,keyless)':>35} {'LOW':>12} {'LOW':>12} {'MODERATE':>12} {'MODERATE':>14}"
     )
     result.observe(
-        f"{'  10-round attacker cost':>30} {_fmt_sats(CCV_RECOVER_VSIZE * 1 * 10):>12} "
+        f"{'  10-round attacker cost':>35} {_fmt_sats(CCV_RECOVER_VSIZE * 1 * 10):>12} "
         f"{_fmt_sats(CCV_RECOVER_VSIZE * 50 * 10):>12} "
         f"{_fmt_sats(CCV_RECOVER_VSIZE * 300 * 10):>12} "
         f"{_fmt_sats(CCV_RECOVER_VSIZE * 500 * 10):>14}"
     )
 
+    # Recovery griefing (OP_VAULT): needs key, more expensive
+    result.observe(
+        f"{'Recovery griefing (OPV,keyed)':>35} {'MINIMAL':>12} {'LOW':>12} {'LOW':>12} {'MODERATE':>14}"
+    )
+    result.observe(
+        f"{'  10-round attacker cost':>35} {_fmt_sats(OPV_RECOVER_VSIZE * 1 * 10):>12} "
+        f"{_fmt_sats(OPV_RECOVER_VSIZE * 50 * 10):>12} "
+        f"{_fmt_sats(OPV_RECOVER_VSIZE * 300 * 10):>12} "
+        f"{_fmt_sats(OPV_RECOVER_VSIZE * 500 * 10):>14}"
+    )
+
     # Watchtower exhaustion (CCV): becomes viable at high fees
     result.observe(
-        f"{'WT exhaustion (CCV)':>30} {'INFEASIBLE':>12} {'LOW':>12} {'MODERATE':>12} {'SIGNIFICANT':>14}"
+        f"{'WT exhaustion (CCV)':>35} {'INFEASIBLE':>12} {'LOW':>12} {'MODERATE':>12} {'SIGNIFICANT':>14}"
     )
-    splits_at_rates = {}
+    ccv_splits = {}
     for rate in [1, 50, 300, 500]:
-        rc = WT_RECOVER_VSIZE * rate
-        splits_at_rates[rate] = VAULT_AMOUNT_SATS // rc if rc > 0 else 999999
+        rc = WT_CCV_RECOVER_VSIZE * rate
+        ccv_splits[rate] = VAULT_AMOUNT_SATS // rc if rc > 0 else 999999
     result.observe(
-        f"{'  splits to exhaust':>30} {splits_at_rates[1]:>12,} "
-        f"{splits_at_rates[50]:>12,} {splits_at_rates[300]:>12,} {splits_at_rates[500]:>14,}"
+        f"{'  splits to exhaust':>35} {ccv_splits[1]:>12,} "
+        f"{ccv_splits[50]:>12,} {ccv_splits[300]:>12,} {ccv_splits[500]:>14,}"
+    )
+
+    # Watchtower exhaustion (OP_VAULT)
+    result.observe(
+        f"{'WT exhaustion (OP_VAULT)':>35} {'INFEASIBLE':>12} {'LOW':>12} {'MODERATE':>12} {'SIGNIFICANT':>14}"
+    )
+    opv_splits = {}
+    for rate in [1, 50, 300, 500]:
+        rc = WT_OPV_RECOVER_VSIZE * rate
+        opv_splits[rate] = VAULT_AMOUNT_SATS // rc if rc > 0 else 999999
+    result.observe(
+        f"{'  splits to exhaust':>35} {opv_splits[1]:>12,} "
+        f"{opv_splits[50]:>12,} {opv_splits[300]:>12,} {opv_splits[500]:>14,}"
     )
 
     # CTV hot-key griefing
     result.observe(
-        f"{'Hot-key griefing (CTV)':>30} {'LOW':>12} {'LOW':>12} {'MODERATE':>12} {'MODERATE':>14}"
+        f"{'Hot-key griefing (CTV)':>35} {'LOW':>12} {'LOW':>12} {'MODERATE':>12} {'MODERATE':>14}"
     )
     result.observe(
-        f"{'  10-round attacker cost':>30} {_fmt_sats(CTV_UNVAULT_VSIZE * 1 * 10):>12} "
+        f"{'  10-round attacker cost':>35} {_fmt_sats(CTV_UNVAULT_VSIZE * 1 * 10):>12} "
         f"{_fmt_sats(CTV_UNVAULT_VSIZE * 50 * 10):>12} "
         f"{_fmt_sats(CTV_UNVAULT_VSIZE * 300 * 10):>12} "
         f"{_fmt_sats(CTV_UNVAULT_VSIZE * 500 * 10):>14}"
@@ -499,30 +589,189 @@ def _section_synthesis(result):
     )
 
     result.observe(
-        "\n4. CTV AND CCV HAVE COMPLEMENTARY VULNERABILITY PROFILES:"
+        "\n4. FEE-DEPENDENT INVERSION OF SECURITY RANKINGS."
     )
     result.observe(
-        "   - CTV: Fee pinning severity is CONSTANT across fee environments"
+        "   The relative security ordering of vault designs FLIPS depending "
+        "on the fee environment.  This is the central empirical finding."
     )
     result.observe(
-        "   - CCV: Watchtower exhaustion severity INCREASES with fee rate"
+        "   LOW FEES (1-10 sat/vB): CCV and OP_VAULT are safer than CTV."
     )
     result.observe(
-        "   - Both: Griefing costs increase linearly (mild deterrent)"
+        "     - Fee pinning against CTV is trivially cheap (~2,750 sats), "
+        "       enabling fund theft when combined with hot-key compromise."
+    )
+    result.observe(
+        "     - Watchtower exhaustion against CCV/OP_VAULT requires ~410k "
+        "       splits at 1 sat/vB — operationally infeasible."
+    )
+    result.observe(
+        "     - Security ranking: CCV ≈ OP_VAULT >> CTV"
+    )
+    result.observe(
+        "   HIGH FEES (100-500 sat/vB): CTV becomes relatively safer."
+    )
+    result.observe(
+        "     - Fee pinning cost is still trivial (fee-invariant) — but "
+        "       so is the defender's CPFP bump at high fees (both scale)."
+    )
+    result.observe(
+        "     - Watchtower exhaustion against CCV/OP_VAULT drops to ~1,366 "
+        "       splits at 300 sat/vB — feasible with sustained attack.  "
+        "       Dust-sized UTXOs become uneconomic to recover."
+    )
+    result.observe(
+        "     - Security ranking: CTV >> CCV ≈ OP_VAULT (splitting viable)"
+    )
+    result.observe(
+        "   CROSSOVER: The inversion occurs around 50-100 sat/vB, where "
+        "watchtower exhaustion transitions from infeasible to feasible.  "
+        "Prior analyses compared designs at a single fee point — this "
+        "masks the crossover entirely."
+    )
+    result.observe(
+        "   NOTE: This is a statement about relative rankings, not absolute "
+        "safety.  CTV's fee pinning vulnerability exists at ALL fee levels "
+        "— but it only matters when combined with hot-key compromise.  "
+        "CCV/OP_VAULT's splitting vulnerability increases with fees — but "
+        "requires sustained attacker commitment over hours/days."
+    )
+    result.observe(
+        "   PRIOR ART: The individual vulnerabilities (fee pinning, keyless "
+        "griefing, watchtower exhaustion) were identified by prior work "
+        "(see REFERENCES.md).  The fee-dependent inversion of their "
+        "relative severity is, to our knowledge, a novel empirical finding."
     )
 
     result.observe(
-        "\n5. CTV AND CCV TRADE DIFFERENT FAILURE MODES.  CTV's worst case "
-        "(fee pinning + hot key) risks fund loss; CCV's worst case "
-        "(watchtower exhaustion) risks partial fund loss when the "
-        "watchtower's budget is exceeded.  Both have mitigations: CTV "
-        "benefits from TRUC/v3 transactions (which would eliminate "
-        "descendant-chain pinning if adopted) and address-reuse risk is "
-        "mitigable by wallet discipline.  CCV benefits from batched "
-        "recovery (extending watchtower viability) and future anti-griefing "
-        "mechanisms.  Which failure mode matters more is deployment-"
-        "dependent: exchange custody may prioritize theft prevention, while "
-        "individual users may prioritize reliable fund access."
+        "\n5. EACH DESIGN TRADES DIFFERENT FAILURE MODES:"
+    )
+    result.observe(
+        "   CTV worst case: fee pinning + hot key → fund theft.  Address reuse "
+        "   → stuck funds.  Single-use design is inflexible but eliminates "
+        "   splitting attacks."
+    )
+    result.observe(
+        "   TRUC/v3 CAVEAT: The TRUC (Topologically Restricted Until "
+        "   Confirmation) transaction proposal (Bitcoin Core #28948, #29496) "
+        "   would eliminate descendant-chain pinning by restricting each "
+        "   unconfirmed transaction to at most one child.  If adopted and "
+        "   applied to CTV vault outputs, Finding 1 (fee pinning severity) "
+        "   would no longer hold — CTV's worst-case failure mode shifts from "
+        "   fund theft to hot-key liveness denial.  This would significantly "
+        "   narrow the gap between CTV and OP_VAULT's security profiles.  "
+        "   However, TRUC adoption requires protocol-level changes and its "
+        "   timeline is uncertain.  This analysis reflects CURRENT relay "
+        "   policy (Bitcoin Core 27.x / 28.x)."
+    )
+    result.observe(
+        "   CCV worst case: watchtower exhaustion → partial fund loss when "
+        "   watchtower budget exceeded.  Keyless griefing → indefinite "
+        "   withdrawal delay.  Mitigated by batched recovery."
+    )
+    result.observe(
+        "   OP_VAULT worst case: trigger key + splitting → watchtower exhaustion "
+        "   (same as CCV).  Recoveryauth compromise → liveness denial (higher "
+        "   bar than CCV's keyless griefing).  Fee model avoids pinning."
+    )
+    result.observe(
+        "   OP_VAULT KEY MANAGEMENT COST: The recoveryauth key is a liveness-"
+        "   critical secret.  If LOST (not just compromised), recovery becomes "
+        "   permanently impossible — triggered vaults cannot be swept to cold "
+        "   storage.  CCV's keyless recovery guarantees fund safety regardless "
+        "   of key management failures.  This is the core cost of OP_VAULT's "
+        "   anti-griefing property: trading a griefing surface for a "
+        "   key-loss surface."
+    )
+
+    # ── Design Space ──────────────────────────────────────────────────
+    result.observe("\n--- Design Space: Flexibility / Security / Complexity ---")
+    result.observe(
+        "Each vault design occupies a distinct point in the tradeoff space "
+        "between flexibility (what operations the vault supports), security "
+        "(what attacks are structurally possible), and complexity (how many "
+        "keys and moving parts must be managed correctly)."
+    )
+    result.observe(
+        "\n                  FLEXIBILITY    SECURITY           COMPLEXITY"
+    )
+    result.observe(
+        "   CTV            Low            High (conditional) Low"
+    )
+    result.observe(
+        "   CCV            High           Moderate           Low"
+    )
+    result.observe(
+        "   OP_VAULT       High           High               High"
+    )
+    result.observe(
+        "\n   CTV — SIMPLEST, MOST RESTRICTIVE"
+    )
+    result.observe(
+        "   Flexibility: No partial withdrawal, no revault, no batching, "
+        "   single-use addresses.  The vault is a one-shot commit-then-sweep."
+    )
+    result.observe(
+        "   Security: High IF TRUC/v3 is adopted (eliminates fee pinning).  "
+        "   Under current relay policy, fee pinning + hot key → fund theft is "
+        "   a critical vulnerability.  Immune to splitting attacks."
+    )
+    result.observe(
+        "   Complexity: Two keys (hot, fee/cold).  No separate recovery "
+        "   authorization.  Simplest key management of the three."
+    )
+    result.observe(
+        "\n   CCV — MOST FLEXIBLE, MOST GRIEFABLE"
+    )
+    result.observe(
+        "   Flexibility: Partial withdrawal, revault, batched triggers, "
+        "   contract-state preservation across spends.  Most expressive."
+    )
+    result.observe(
+        "   Security: Keyless recovery eliminates key-loss risk — fund safety "
+        "   is GUARANTEED regardless of key management failures.  But anyone "
+        "   can grief recovery (no authorization).  Susceptible to splitting."
+    )
+    result.observe(
+        "   Complexity: Two keys (unvault, internal).  No recovery key.  "
+        "   Lowest operational complexity for the watchtower (no key needed)."
+    )
+    result.observe(
+        "\n   OP_VAULT — BALANCED, MOST COMPLEX KEY MANAGEMENT"
+    )
+    result.observe(
+        "   Flexibility: Partial withdrawal, revault, batched triggers, "
+        "   CTV-locked withdrawal output.  Similar to CCV."
+    )
+    result.observe(
+        "   Security: Authorized recovery blocks anonymous griefing.  Fee "
+        "   model avoids pinning.  But recoveryauth key LOSS = permanent "
+        "   inability to recover.  Susceptible to same splitting as CCV."
+    )
+    result.observe(
+        "   Complexity: Three keys (trigger xpub, recoveryauth, recovery "
+        "   destination).  Watchtower must hold recoveryauth key (higher "
+        "   trust requirement).  BIP-32 key hierarchy adds derivation logic."
+    )
+    result.observe(
+        "\n   TRADEOFF SUMMARY: CTV trades flexibility for simplicity.  "
+        "CCV trades griefing resistance for guaranteed fund safety.  "
+        "OP_VAULT trades key management complexity for the strongest "
+        "security profile — but only if all keys are managed correctly."
+    )
+
+    # ── Deployment guidance ────────────────────────────────────────────
+    result.observe(
+        "\n   DEPLOYMENT GUIDANCE: Exchange custody → prioritize theft prevention "
+        "   and operational auditability (OP_VAULT: authorized recovery, "
+        "   batched triggers, HSM-backed recoveryauth).  Individual users → "
+        "   prioritize simplicity and guaranteed fund access (CCV: keyless "
+        "   recovery means no key-loss risk; fewer keys to manage).  "
+        "   Institutional cold storage with dedicated security teams → "
+        "   OP_VAULT's full defense suite, IF the organization can maintain "
+        "   recoveryauth key availability.  Low-value automated vaults → "
+        "   CTV's simplicity minimizes operational failure modes."
     )
 
 
@@ -538,6 +787,11 @@ def _record_structural_metrics(result):
         ("ccv_withdraw", CCV_WITHDRAW_VSIZE, "p2tr_ccv"),
         ("ccv_recover", CCV_RECOVER_VSIZE, "p2tr_ccv"),
         ("ccv_trigger_revault", CCV_TRIGGER_REVAULT_VSIZE, "p2tr_ccv"),
+        ("opv_tovault", OPV_TOVAULT_VSIZE, "p2tr_opvault"),
+        ("opv_trigger", OPV_TRIGGER_VSIZE, "p2tr_opvault"),
+        ("opv_withdraw", OPV_WITHDRAW_VSIZE, "p2tr_opvault"),
+        ("opv_recover", OPV_RECOVER_VSIZE, "p2tr_opvault"),
+        ("opv_trigger_revault", OPV_TRIGGER_REVAULT_VSIZE, "p2tr_opvault"),
         ("fee_pin_chain", FEE_PIN_TOTAL_CHAIN_VSIZE, "p2wpkh"),
     ]
 

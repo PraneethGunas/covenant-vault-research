@@ -106,6 +106,8 @@ def run(adapter: VaultAdapter) -> ExperimentResult:
             _run_ccv_griefing(adapter, result, rpc)
         elif adapter.name == "ctv":
             _run_ctv_griefing(adapter, result, rpc)
+        elif adapter.name == "opvault":
+            _run_opvault_griefing(adapter, result, rpc)
     except Exception as e:
         result.error = str(e)
         result.observe(f"FAILED: {e}")
@@ -469,5 +471,177 @@ def _run_ctv_griefing(adapter, result, rpc):
         result.observe(
             f"  {fee_rate:>3} sat/vB: attacker={atk_cost:>7,} sats/round, "
             f"defender={def_cost:>7,} sats/round"
+        )
+
+
+def _run_opvault_griefing(adapter, result, rpc):
+    """OP_VAULT: Authorized recovery griefing (requires recoveryauth key).
+
+    On OP_VAULT, the griefing works like CCV's direction: the attacker
+    calls OP_VAULT_RECOVER to front-run legitimate triggers.  But unlike
+    CCV, this REQUIRES the recoveryauth key.
+
+    Attacker profile: Has the recoveryauth key, NOT the trigger key.
+    Goal: Deny withdrawals by front-running triggers with recovery.
+    Key difference from CCV: Higher attacker bar (need key).
+    """
+    result.observe("=== OP_VAULT Authorized Recovery Griefing ===")
+    result.observe(
+        "On OP_VAULT, recovery griefing requires the RECOVERYAUTH KEY.  "
+        "This is OP_VAULT's explicit anti-griefing design: unlike CCV where "
+        "anyone can call recover, OP_VAULT demands a Schnorr signature from "
+        "the recoveryauth private key."
+    )
+
+    # ── Phase 1: Measure costs ───────────────────────────────────────
+    result.observe("=== Phase 1: Measure trigger and recovery vsize ===")
+
+    vault = adapter.create_vault(VAULT_AMOUNT)
+    result.observe(f"Vault created: {vault.vault_txid[:16]}... ({vault.amount_sats} sats)")
+
+    unvault = adapter.trigger_unvault(vault)
+    trigger_metrics = adapter.collect_tx_metrics(
+        TxRecord(
+            txid=unvault.unvault_txid,
+            label="trigger",
+            amount_sats=unvault.amount_sats,
+        ),
+        rpc,
+    )
+    trigger_vsize = trigger_metrics.vsize or 0
+    result.observe(f"Trigger tx: {unvault.unvault_txid[:16]}... ({trigger_vsize} vB)")
+    result.add_tx(trigger_metrics)
+
+    recover_record = adapter.recover(unvault)
+    recover_metrics = adapter.collect_tx_metrics(recover_record, rpc)
+    recover_vsize = recover_metrics.vsize or 0
+    result.observe(f"Recovery tx: {recover_record.txid[:16]}... ({recover_vsize} vB)")
+    result.add_tx(recover_metrics)
+
+    if recover_vsize > 0:
+        asymmetry = trigger_vsize / recover_vsize
+        result.observe(
+            f"Cost asymmetry: trigger/recovery = {trigger_vsize}/{recover_vsize} "
+            f"= {asymmetry:.2f}x"
+        )
+    else:
+        asymmetry = 1.0
+
+    # ── Phase 2: Griefing loop ───────────────────────────────────────
+    result.observe(f"=== Phase 2: Griefing loop ({MAX_GRIEF_ROUNDS} rounds) ===")
+    result.observe(
+        "NOTE: OP_VAULT griefing requires the recoveryauth key.  This is a "
+        "HIGHER bar than CCV's keyless griefing — the attacker must have "
+        "compromised a specific key, not just run a Bitcoin node."
+    )
+
+    attacker_cumulative_vsize = 0
+    defender_cumulative_vsize = 0
+    rounds_completed = 0
+
+    for round_num in range(1, MAX_GRIEF_ROUNDS + 1):
+        try:
+            vault = adapter.create_vault(VAULT_AMOUNT)
+            unvault = adapter.trigger_unvault(vault)
+
+            t_metrics = adapter.collect_tx_metrics(
+                TxRecord(txid=unvault.unvault_txid, label=f"trigger_r{round_num}",
+                         amount_sats=unvault.amount_sats), rpc)
+            t_vsize = t_metrics.vsize or trigger_vsize
+
+            r_record = adapter.recover(unvault)
+            r_metrics = adapter.collect_tx_metrics(r_record, rpc)
+            r_vsize = r_metrics.vsize or recover_vsize
+
+            attacker_cumulative_vsize += r_vsize
+            defender_cumulative_vsize += t_vsize
+            rounds_completed = round_num
+
+            if round_num <= 3 or round_num % 5 == 0 or round_num == MAX_GRIEF_ROUNDS:
+                result.observe(
+                    f"  Round {round_num}: trigger={t_vsize} vB, "
+                    f"recover={r_vsize} vB  |  "
+                    f"Cumulative: defender={defender_cumulative_vsize} vB, "
+                    f"attacker={attacker_cumulative_vsize} vB"
+                )
+
+        except Exception as e:
+            result.observe(f"  Round {round_num}: FAILED — {e}")
+            break
+
+    result.add_tx(TxMetrics(
+        label="griefing_loop_totals",
+        vsize=attacker_cumulative_vsize + defender_cumulative_vsize,
+        fee_sats=0,
+        num_inputs=rounds_completed,
+        num_outputs=rounds_completed,
+    ))
+
+    if attacker_cumulative_vsize > 0:
+        actual_asymmetry = defender_cumulative_vsize / attacker_cumulative_vsize
+        result.observe(
+            f"After {rounds_completed} rounds: "
+            f"defender spent {defender_cumulative_vsize} vB total, "
+            f"attacker spent {attacker_cumulative_vsize} vB total.  "
+            f"Ratio: {actual_asymmetry:.2f}x (defender pays more)."
+        )
+
+    # ── Phase 3: Three-way comparison ─────────────────────────────────
+    result.observe("=== Phase 3: Three-way griefing comparison ===")
+    result.observe(
+        "  CCV:      Keyless recovery — NO key needed.  Any node can grief.  "
+        "            Attack cost: ~122 vB/round.  Bar: ZERO."
+    )
+    result.observe(
+        f"  OP_VAULT: Authorized recovery — recoveryauth key needed.  "
+        f"            Attack cost: ~{recover_vsize} vB/round.  Bar: key compromise."
+    )
+    result.observe(
+        "  CTV:      Hot-key sweep — hot key needed (reverse direction).  "
+        "            Attack cost: ~164 vB/round.  Bar: hot key compromise.  "
+        "            Can escalate to fund theft with fee key."
+    )
+    result.observe(
+        "  HIERARCHY of griefing severity (by attacker bar):"
+    )
+    result.observe(
+        "    1. CCV (lowest bar — keyless, anyone can grief)"
+    )
+    result.observe(
+        "    2. OP_VAULT (medium bar — need recoveryauth key)"
+    )
+    result.observe(
+        "    3. CTV (highest bar — need hot key, but can escalate to theft)"
+    )
+    result.observe(
+        "  INVERSE HIERARCHY — fund safety under key management failure:"
+    )
+    result.observe(
+        "    1. CCV (strongest — keyless recovery guarantees fund safety "
+        "regardless of key loss or mismanagement)"
+    )
+    result.observe(
+        "    2. CTV (moderate — cold key loss prevents tocold sweep, but "
+        "funds remain in vault until hot key action)"
+    )
+    result.observe(
+        "    3. OP_VAULT (weakest — recoveryauth key loss permanently "
+        "disables recovery; triggered vaults become unrecoverable)"
+    )
+    result.observe(
+        "  The two hierarchies are inverses: higher griefing resistance "
+        "(OP_VAULT > CTV > CCV) comes at the cost of higher key-loss risk "
+        "(OP_VAULT > CTV > CCV).  Each design occupies a different point "
+        "in this tradeoff."
+    )
+
+    # Fee rate analysis
+    result.observe("=== Phase 4: Fee-rate sensitivity (OP_VAULT) ===")
+    for fee_rate in [1, 10, 50, 100, 500]:
+        atk_cost = recover_vsize * fee_rate
+        def_cost = trigger_vsize * fee_rate
+        result.observe(
+            f"  {fee_rate:>3} sat/vB: attacker={atk_cost:>8,} sats/round, "
+            f"defender={def_cost:>8,} sats/round"
         )
 

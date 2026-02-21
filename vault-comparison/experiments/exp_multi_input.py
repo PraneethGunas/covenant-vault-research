@@ -278,6 +278,101 @@ def _sweep_ccv(adapter, result, rpc, vault_counts):
     _run_deduct_demo(adapter, result)
 
 
+def _sweep_opvault(adapter, result, rpc, vault_counts):
+    """OP_VAULT: measure batched trigger cost at each N.
+
+    OP_VAULT's start_withdrawal() accepts multiple VaultUtxo objects,
+    combining them into a single trigger transaction.  This is similar
+    to CCV batching but uses OP_VAULT's specific script structure.
+    """
+    result.observe("--- OP_VAULT batching sweep (real batched triggers) ---")
+
+    from harness.metrics import TxMetrics
+
+    vsize_by_n = {}
+    weight_by_n = {}
+    hit_ceiling = False
+
+    for n in vault_counts:
+        if hit_ceiling:
+            result.observe(f"  N={n}: SKIPPED — previous batch hit tx size limit")
+            continue
+
+        try:
+            vaults = [adapter.create_vault(VAULT_AMOUNT) for _ in range(n)]
+
+            if n == 1:
+                uv = adapter.trigger_unvault(vaults[0])
+            else:
+                uv = adapter.trigger_batched(vaults)
+
+            info = rpc.get_tx_info(uv.unvault_txid)
+            total_vsize = info.get("vsize", 0)
+            total_weight = info.get("weight", 0)
+            vsize_by_n[n] = total_vsize
+            weight_by_n[n] = total_weight
+
+            # Complete withdrawal to get fee info
+            w = adapter.complete_withdrawal(uv)
+            wm = adapter.collect_tx_metrics(w, rpc)
+
+            result.add_tx(TxMetrics(
+                label=f"batch_{n}_total",
+                txid=uv.unvault_txid,
+                vsize=total_vsize,
+                weight=total_weight,
+                fee_sats=wm.fee_sats,
+                num_inputs=n,
+                num_outputs=info.get("vout_count", len(info.get("vout", []))),
+            ))
+
+            per_vault = total_vsize / n if n > 0 else 0
+            result.observe(
+                f"  N={n}: total_vsize={total_vsize}, weight={total_weight}, "
+                f"per_vault={per_vault:.1f} vB, fee={wm.fee_sats} sats"
+            )
+
+            if total_weight > 400_000:
+                result.observe(
+                    f"  WARNING: N={n} exceeds standardness limit "
+                    f"({total_weight:,} > 400,000 WU)"
+                )
+                hit_ceiling = True
+
+        except Exception as e:
+            err_str = str(e)
+            result.observe(f"  N={n}: FAILED — {err_str[:150]}")
+            if "tx-size" in err_str or "too large" in err_str.lower():
+                hit_ceiling = True
+
+    _ceiling_analysis(result, vault_counts, vsize_by_n, weight_by_n, "opvault")
+
+    # OP_VAULT comparison notes
+    result.observe("\n--- OP_VAULT batching comparison ---")
+    result.observe(
+        "OP_VAULT batching uses start_withdrawal() with multiple VaultUtxo "
+        "inputs.  Unlike CCV, there is no DEDUCT mode footgun — OP_VAULT's "
+        "opcode semantics handle revault accounting internally."
+    )
+    result.observe(
+        "THREE-WAY BATCHING COMPARISON:"
+    )
+    result.observe(
+        "  CTV:      No batching — each vault UTXO needs its own trigger tx.  "
+        "            CTV commits to input count/index at creation time."
+    )
+    result.observe(
+        "  CCV:      Batching supported — multiple inputs in one trigger.  "
+        "            DEDUCT mode footgun: multiple DEDUCT inputs sharing one "
+        "            revault output → silent failure.  Coordinator complexity."
+    )
+    result.observe(
+        "  OP_VAULT: Batching supported — multiple VaultUtxos in one trigger.  "
+        "            No DEDUCT footgun.  Automatic revault for excess amount.  "
+        "            Simpler coordinator logic than CCV."
+    )
+
+
 def _run_deduct_demo(adapter, result):
     """Demonstrate cross-input DEDUCT accounting bug.
 
@@ -489,6 +584,8 @@ def run(adapter: VaultAdapter) -> ExperimentResult:
             # Run DEDUCT demo only once (not part of sweep)
             result.observe("")
             _run_deduct_demo(adapter, result)
+        elif adapter.name == "opvault":
+            _sweep_opvault(adapter, result, rpc, vault_counts)
         else:
             result.observe(f"No multi-input test for {adapter.name}")
     except Exception as e:

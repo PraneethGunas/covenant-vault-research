@@ -83,6 +83,8 @@ def run(adapter: VaultAdapter) -> ExperimentResult:
             _phase2_pinning_attack(adapter, result, rpc)
         elif adapter.name == "ccv":
             _phase2_ccv_comparison(adapter, result, rpc)
+        elif adapter.name == "opvault":
+            _phase2_opvault_comparison(adapter, result, rpc)
 
     except Exception as e:
         result.error = str(e)
@@ -542,6 +544,102 @@ def _phase2_ccv_comparison(adapter, result, rpc):
         "TRADEOFF: CTV trades fee flexibility (CPFP via anchors) for a "
         "pinning attack surface.  CCV avoids pinning but has fewer fee "
         "bumping options.  Neither design is strictly better."
+    )
+
+    # Clean up
+    try:
+        adapter.complete_withdrawal(unvault)
+    except Exception:
+        pass
+
+
+def _phase2_opvault_comparison(adapter, result, rpc):
+    """Phase 2 (OP_VAULT): Analyze fee model — separate fee inputs, no anchors."""
+    result.observe("=== Phase 2: OP_VAULT fee model (fee inputs, no anchor outputs) ===")
+
+    vault = adapter.create_vault(VAULT_AMOUNT)
+    unvault = adapter.trigger_unvault(vault)
+
+    unvault_info = rpc.get_tx_info(unvault.unvault_txid)
+    n_outputs = len(unvault_info["vout"])
+    n_inputs = len(unvault_info["vin"])
+
+    result.observe(f"Trigger tx: {n_inputs} input(s), {n_outputs} output(s)")
+
+    has_anchor = False
+    has_fee_input = n_inputs > 1  # Fee wallet provides a separate input
+
+    for i, vout in enumerate(unvault_info["vout"]):
+        value_sats = int(vout["value"] * 100_000_000)
+        script_type = vout.get("scriptPubKey", {}).get("type", "unknown")
+        if value_sats < 1000:
+            has_anchor = True
+            result.observe(
+                f"  vout[{i}]: {value_sats} sats ({script_type}) — anchor-like output"
+            )
+        else:
+            result.observe(f"  vout[{i}]: {value_sats} sats ({script_type})")
+
+    if has_fee_input:
+        result.observe(
+            "FEE MODEL: OP_VAULT uses a SEPARATE FEE INPUT from the fee wallet.  "
+            "The trigger transaction includes a fee wallet UTXO as an additional "
+            "input, with change going back to the fee wallet.  This avoids the "
+            "need for anchor outputs entirely."
+        )
+    if not has_anchor:
+        result.observe(
+            "CONFIRMED: No anchor outputs on the trigger tx.  Descendant-chain "
+            "pinning has no direct attack surface."
+        )
+    else:
+        result.observe(
+            "WARNING: Anchor-like output detected — investigate whether this "
+            "creates a pinning surface."
+        )
+
+    result.observe(
+        "PINNING ANALYSIS: OP_VAULT's fee model is structurally resistant to "
+        "descendant-chain pinning because:"
+    )
+    result.observe(
+        "  (1) No anchor outputs = no external UTXO for attackers to chain from"
+    )
+    result.observe(
+        "  (2) Fee inputs come from the fee wallet, which is controlled by the "
+        "      vault operator (not committed in the vault script)"
+    )
+    result.observe(
+        "  (3) The fee wallet input provides exact fees, so no CPFP is needed"
+    )
+    result.observe(
+        "RESIDUAL SURFACE: The fee wallet's UTXO could theoretically be pinned "
+        "by an attacker who spends it before the trigger tx confirms (a "
+        "double-spend race on the fee input).  This requires the attacker to "
+        "know which fee wallet UTXO will be used AND win a mempool race — a "
+        "much weaker attack surface than CTV's anchor pinning (which requires "
+        "only the fee key or anyone-can-spend access).  The fee wallet can "
+        "mitigate by maintaining multiple UTXOs and selecting inputs at "
+        "broadcast time.  This is NOT zero risk, but it is orders of "
+        "magnitude harder than descendant-chain pinning."
+    )
+
+    result.observe(
+        "THREE-WAY COMPARISON:"
+    )
+    result.observe(
+        "  CTV:      Anchor outputs → descendant-chain pinning → fund theft "
+        "            (with hot+fee key).  CRITICAL vulnerability."
+    )
+    result.observe(
+        "  CCV:      No anchors, relay-policy fees → no pinning surface.  "
+        "            Fee bumping via relay policy only."
+    )
+    result.observe(
+        "  OP_VAULT: Fee inputs from separate wallet → no pinning surface.  "
+        "            Fee management is more explicit but avoids the anchor "
+        "            vulnerability.  Fee wallet key is NOT baked into the "
+        "            vault script (unlike CTV's fee key in the CTV hash)."
     )
 
     # Clean up

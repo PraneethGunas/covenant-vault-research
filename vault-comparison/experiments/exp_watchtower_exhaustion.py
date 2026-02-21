@@ -45,9 +45,16 @@ Key measurements:
 
 CTV comparison: CTV has no trigger_and_revault.  The full vault amount
 must be unvaulted at once, so this splitting attack is structurally
-impossible.  This is a CCV-specific vulnerability that arises directly
-from the revault capability — a tradeoff: revault enables flexible
-partial withdrawals but also enables this attack.
+impossible.  This is a vulnerability for any vault with revault capability
+(CCV and OP_VAULT) — a tradeoff: revault enables flexible partial
+withdrawals but also enables this attack.
+
+OP_VAULT comparison: OP_VAULT also supports partial withdrawal with
+automatic revault (start_withdrawal with excess creates a revault output).
+The splitting attack applies identically.  However, OP_VAULT's authorized
+recovery requires the recoveryauth key, making the watchtower's recovery
+path more controlled (no third-party interference) but also requiring key
+management for the watchtower.
 """
 
 from adapters.base import VaultAdapter
@@ -76,7 +83,7 @@ WITHDRAWAL_FRACTIONS = [
 @register(
     name="watchtower_exhaustion",
     description="Revault splitting attack: exhaust watchtower recovery budget",
-    tags=["core", "ccv_only", "security", "quantitative", "revault"],
+    tags=["core", "security", "quantitative", "revault"],
 )
 def run(adapter: VaultAdapter) -> ExperimentResult:
     max_splits = getattr(adapter, "max_splits", DEFAULT_MAX_SPLITS)
@@ -109,9 +116,15 @@ def run(adapter: VaultAdapter) -> ExperimentResult:
         )
         return result
 
-    # ── CCV: execute the splitting attack ───────────────────────────
+    # ── CCV/OP_VAULT: execute the splitting attack ─────────────────
+    # Fallback vsizes for fee table (replaced by measurements if splitting succeeds).
+    # Defaults from empirical runs: CCV trigger_revault=162, recover=122;
+    # OP_VAULT trigger_revault=292, recover=246.
+    measured_trigger_vsize = 292 if adapter.name == "opvault" else 162
+    measured_recover_vsize = 246 if adapter.name == "opvault" else 122
     try:
-        _run_splitting_attack(adapter, result, rpc, max_splits)
+        measured_trigger_vsize, measured_recover_vsize = \
+            _run_splitting_attack(adapter, result, rpc, max_splits)
     except Exception as e:
         result.error = str(e)
         result.observe(f"FAILED: {e}")
@@ -135,10 +148,10 @@ def run(adapter: VaultAdapter) -> ExperimentResult:
         result,
         threat_model_name="Watchtower exhaustion (splitting attack)",
         vsize_rows=[
-            {"label": "attacker_trigger_revault", "vsize": 200,
-             "description": "trigger_and_revault per split (attacker pays)"},
-            {"label": "watchtower_recovery", "vsize": 150,
-             "description": "Recovery per Unvaulting UTXO (watchtower pays)"},
+            {"label": "attacker_trigger_revault", "vsize": measured_trigger_vsize,
+             "description": f"trigger_and_revault per split — {adapter.name} measured"},
+            {"label": "watchtower_recovery", "vsize": measured_recover_vsize,
+             "description": f"Recovery per Unvaulting UTXO — {adapter.name} measured"},
         ],
         vault_amount_sats=VAULT_AMOUNT,
     )
@@ -727,8 +740,18 @@ def _run_splitting_attack(adapter, result, rpc, max_splits):
         f"CTV COMPARISON: This attack is structurally impossible on CTV.  "
         f"CTV's lack of partial withdrawal means the attacker can only trigger "
         f"one unvault of the full amount, which the watchtower recovers in one tx.  "
-        f"This is the cost of CCV's revault flexibility."
+        f"This is the cost of revault flexibility (shared by CCV and OP_VAULT)."
     )
+    if adapter.name == "opvault":
+        result.observe(
+            f"OP_VAULT NOTE: The splitting attack mechanics are identical to CCV, "
+            f"but recovery requires the recoveryauth key.  This means: (1) the "
+            f"watchtower must hold the recoveryauth key to perform recovery, "
+            f"(2) no third party can interfere with recovery (anti-griefing), "
+            f"(3) if the recoveryauth key is lost, recovery is impossible."
+        )
+
+    return (trigger_vsize, recover_vsize)
 
 
 def _tx_record(label, txid, amount):
