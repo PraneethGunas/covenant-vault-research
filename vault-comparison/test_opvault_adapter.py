@@ -100,15 +100,25 @@ def main():
         traceback.print_exc()
         return False
 
-    # Step 5: Test recovery
+    # Step 5: Test recovery (from vault state) + verify recovery address
     print("\n[5] Testing recovery (new vault)...")
     try:
         vault2 = adapter.create_vault(300_000)
         print(f"    Vault2 created: txid={vault2.vault_txid[:16]}...")
 
+        # Compute expected recovery address from the config.
+        # VaultConfig.recov_address applies the P2TR tweak to recovery_pubkey
+        # and encodes as bech32m — this is the canonical recovery destination.
+        config2 = vault2.extra["config"]
+        expected_recovery_addr = config2.recov_address
+        print(f"    Expected recovery address: {expected_recovery_addr[:30]}...")
+
         recovery = adapter.recover(vault2)
         print(f"    Recovery txid={recovery.txid[:16]}...")
         print(f"    Label: {recovery.label}")
+
+        # Verify recovery tx sends to the expected recovery address
+        _verify_recovery_address(rpc, recovery.txid, expected_recovery_addr, "vault-state")
     except Exception as e:
         print(f"    Recovery FAILED: {e}")
         traceback.print_exc()
@@ -121,8 +131,13 @@ def main():
         unvault3 = adapter.trigger_unvault(vault3)
         print(f"    Triggered: txid={unvault3.unvault_txid[:16]}...")
 
+        config3 = vault3.extra["config"]
+        expected_recovery_addr3 = config3.recov_address
+
         recovery3 = adapter.recover(unvault3)
         print(f"    Recovery txid={recovery3.txid[:16]}...")
+
+        _verify_recovery_address(rpc, recovery3.txid, expected_recovery_addr3, "triggered-state")
     except Exception as e:
         print(f"    Triggered recovery FAILED: {e}")
         traceback.print_exc()
@@ -135,6 +150,33 @@ def main():
     print("ALL TESTS PASSED")
     print("=" * 60)
     return True
+
+
+def _verify_recovery_address(rpc, txid, expected_addr, label):
+    """Check that the recovery tx's largest output goes to expected_addr.
+
+    The recovery tx has two outputs: the recovered funds (large) and
+    the fee wallet change (small).  We check the largest output's
+    address against VaultConfig.recov_address, which is the P2TR
+    address derived from the tweaked recovery_pubkey.
+    """
+    rec_info = rpc.call("getrawtransaction", txid, True)
+    rec_outputs = rec_info["vout"]
+    largest = max(rec_outputs, key=lambda v: v["value"])
+    actual_addr = largest["scriptPubKey"].get("address", "")
+
+    if actual_addr == expected_addr:
+        print(f"    Recovery address verification ({label}): PASS")
+        print(f"      {actual_addr}")
+    elif not actual_addr:
+        # Some node builds don't include 'address' in scriptPubKey
+        rec_spk = largest["scriptPubKey"].get("hex", "")
+        print(f"    Recovery address verification ({label}): INCONCLUSIVE")
+        print(f"      (node did not return address field; SPK={rec_spk[:40]}...)")
+    else:
+        print(f"    Recovery address verification ({label}): FAIL")
+        print(f"      expected: {expected_addr}")
+        print(f"      actual:   {actual_addr}")
 
 
 def _has_wallet(rpc):

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Vault Comparison Runner
 
-CLI entry point for running comparative experiments across CTV and CCV
-vault implementations.
+CLI entry point for running comparative experiments across CTV, CCV,
+and OP_VAULT vault implementations.
 
 Usage:
     # List available experiments
@@ -11,14 +11,14 @@ Usage:
     # Run a single experiment (auto-switches node + initializes regtest)
     uv run run.py run lifecycle_costs --covenant ctv
 
-    # Run on both covenants (auto-switches: CTV first, then CCV)
-    uv run run.py run lifecycle_costs --covenant both
+    # Run on all three covenants (CTV → CCV → OP_VAULT)
+    uv run run.py run lifecycle_costs --covenant all
 
-    # Run all experiments tagged 'core'
-    uv run run.py run --tag core --covenant ccv
+    # Run all core experiments across all covenants
+    uv run run.py run --tag core --covenant all
 
-    # Run all experiments
-    uv run run.py run --all --covenant both
+    # Run all experiments on all covenants
+    uv run run.py run --all --covenant all
 
     # Skip node switching (node already running)
     uv run run.py run lifecycle_costs --covenant ctv --no-switch
@@ -69,6 +69,8 @@ import experiments.exp_recovery_griefing
 import experiments.exp_ccv_edge_cases
 import experiments.exp_watchtower_exhaustion
 import experiments.exp_fee_sensitivity
+import experiments.exp_opvault_recovery_auth
+import experiments.exp_opvault_trigger_key_theft
 
 
 def get_adapter(covenant: str):
@@ -291,8 +293,9 @@ def cmd_run(args):
     initializes regtest before running. Use --no-switch to skip this
     if the node is already running.
 
-    When --covenant both, runs all experiments on CTV first (switching to
-    Inquisition), then switches to Merkleize and runs on CCV.
+    When --covenant all, runs experiments on CTV first (Inquisition),
+    then CCV (Merkleize), then OP_VAULT (opvault branch).
+    --covenant both is a legacy alias that runs CTV + CCV only.
     """
     # Determine which experiments to run
     if args.all:
@@ -312,10 +315,10 @@ def cmd_run(args):
         sys.exit(1)
 
     # Determine covenants
-    if args.covenant == "both":
-        covenants = ["ctv", "ccv"]
-    elif args.covenant == "all_covenants":
+    if args.covenant in ("all", "all_covenants"):
         covenants = ["ctv", "ccv", "opvault"]
+    elif args.covenant == "both":
+        covenants = ["ctv", "ccv"]
     else:
         covenants = [args.covenant]
 
@@ -456,9 +459,11 @@ def main():
     # run
     sub_run = subparsers.add_parser("run", help="Run experiments")
     sub_run.add_argument("experiment", nargs="?", help="Experiment name")
-    sub_run.add_argument("--covenant", choices=["ctv", "ccv", "opvault", "both", "all_covenants"],
+    sub_run.add_argument("--covenant", choices=["ctv", "ccv", "opvault", "both", "all", "all_covenants"],
                          default="ctv",
-                         help="Which covenant to test (default: ctv)")
+                         help="Which covenant to test (default: ctv). "
+                              "'all' runs CTV, CCV, and OP_VAULT. "
+                              "'both' is a legacy alias for CTV+CCV only.")
     sub_run.add_argument("--tag", help="Run all experiments with this tag")
     sub_run.add_argument("--all", action="store_true", help="Run all experiments")
     sub_run.add_argument("--no-switch", action="store_true",
