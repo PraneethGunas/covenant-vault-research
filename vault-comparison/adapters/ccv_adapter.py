@@ -166,8 +166,17 @@ class CCVAdapter(VaultAdapter):
             },
         )
 
-    def complete_withdrawal(self, unvault: UnvaultState) -> TxRecord:
-        """Complete the withdrawal after timelock expires."""
+    def complete_withdrawal(self, unvault: UnvaultState, path: str = "hot") -> TxRecord:
+        """Complete the withdrawal after timelock expires.
+
+        CCV only supports path="hot" (normal withdrawal after CSV).
+        There is no CCV cold-sweep tx — use recover() for emergency escape.
+        """
+        if path != "hot":
+            raise ValueError(
+                f"CCV does not have a cold-sweep path. Use recover() instead. "
+                f"Got path={path!r}"
+            )
         instance = unvault.extra["instance"]
         ctv_hash = unvault.extra["ctv_hash"]
         ctv_template = unvault.extra["ctv_template"]

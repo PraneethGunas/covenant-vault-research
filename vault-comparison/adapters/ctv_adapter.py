@@ -22,8 +22,20 @@ _vault_counter = 0
 
 def _ensure_ctv_imports():
     """Lazy-load the CTV vault modules."""
-    if str(CTV_REPO) not in sys.path:
-        sys.path.insert(0, str(CTV_REPO))
+    # Ensure simple-ctv-vault is at the FRONT of sys.path so its main.py wins
+    repo_str = str(CTV_REPO)
+    if repo_str in sys.path:
+        sys.path.remove(repo_str)
+    sys.path.insert(0, repo_str)
+
+    # Evict any cached 'main' / 'rpc' modules from a different repo
+    # (e.g. opvault-demo's main.py from a previous covenant run).
+    for mod_name in ("main", "rpc"):
+        if mod_name in sys.modules:
+            cached = sys.modules[mod_name]
+            cached_path = getattr(cached, "__file__", "") or ""
+            if repo_str not in cached_path:
+                del sys.modules[mod_name]
 
     from bitcoin import SelectParams
     SelectParams("regtest")
@@ -296,8 +308,14 @@ class CTVAdapter(VaultAdapter):
     def complete_withdrawal(self, unvault: UnvaultState, path: str = "hot") -> TxRecord:
         """Complete withdrawal via hot or cold path.
 
-        Args:
-            path: "hot" (after timelock) or "cold" (immediate CTV sweep)
+        CTV is the only covenant with two distinct pre-committed withdrawal
+        transactions:
+
+            path="hot":  tohot_tx — sends to hot wallet after CSV timelock.
+            path="cold": tocold_tx — immediate sweep to cold wallet (no delay).
+
+        Both are CTV-locked at vault creation time.  recover() delegates to
+        path="cold".
         """
         plan = unvault.extra["plan"]
         executor = unvault.extra["executor"]

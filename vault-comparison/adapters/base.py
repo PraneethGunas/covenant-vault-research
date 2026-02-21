@@ -91,11 +91,38 @@ class VaultAdapter(ABC):
         ...
 
     @abstractmethod
-    def complete_withdrawal(self, unvault: UnvaultState) -> TxRecord:
+    def complete_withdrawal(self, unvault: UnvaultState, path: str = "hot") -> TxRecord:
         """Complete the withdrawal after timelock expires.
 
-        For CTV: broadcasts tohot_tx (hot path) or tocold_tx (cold sweep).
-        For CCV: broadcasts the withdraw tx via CTV template.
+        Args:
+            unvault: Handle from trigger_unvault().
+            path:    Withdrawal path.  The only universally supported value
+                     is ``"hot"`` (wait for timelock, then broadcast the
+                     final withdrawal tx).  ``"cold"`` is CTV-specific and
+                     should NOT be used in cross-covenant experiments — call
+                     ``recover()`` instead.
+
+        Path semantics per covenant:
+
+            CTV:      "hot" → tohot_tx (to hot wallet, after CSV).
+                      "cold" → tocold_tx (immediate sweep to cold wallet).
+                      recover() delegates to complete_withdrawal(path="cold").
+                      These are two DISTINCT CTV-locked transactions baked
+                      into the vault plan at creation time.
+
+            CCV:      "hot" → withdraw via CTV template (after CSV).
+                      "cold" has no meaning — CCV doesn't have a separate
+                      cold-sweep transaction.  Emergency escape uses
+                      recover() (keyless, any-time).
+
+            OP_VAULT: "hot" → withdrawal_tx (CTV-locked, after spend_delay).
+                      "cold" internally delegates to recover() (authorized
+                      recovery).  There is no distinct cold-sweep tx —
+                      OP_VAULT's recovery IS the cold path.
+
+        For cross-covenant experiments: always use complete_withdrawal()
+        for the normal happy-path withdrawal, and recover() for emergency
+        recovery.  Never branch on path="cold" in comparative code.
         """
         ...
 
@@ -103,8 +130,21 @@ class VaultAdapter(ABC):
     def recover(self, state) -> TxRecord:
         """Execute emergency recovery.
 
-        `state` can be a VaultState or UnvaultState — recovery should work
+        ``state`` can be a VaultState or UnvaultState — recovery should work
         from either position in the lifecycle.
+
+        Recovery semantics per covenant:
+
+            CTV:      Broadcasts tocold_tx (the CTV-locked cold sweep).
+                      Only works from UnvaultState (must trigger first).
+                      Requires the CTV witness but no runtime key.
+
+            CCV:      Keyless recovery — anyone can broadcast.  Works from
+                      VaultState or UnvaultState.  No key material needed.
+
+            OP_VAULT: Authorized recovery — requires recoveryauth key
+                      signature.  Works from VaultState or UnvaultState.
+                      This is OP_VAULT's anti-griefing design.
         """
         ...
 

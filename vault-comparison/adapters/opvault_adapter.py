@@ -40,8 +40,20 @@ def _ensure_opvault_imports():
     # Point the upstream code at the local regtest node
     os.environ.setdefault("BITCOIN_RPC_URL", "http://127.0.0.1:18443")
 
-    if str(OPVAULT_REPO) not in sys.path:
-        sys.path.insert(0, str(OPVAULT_REPO))
+    # Ensure opvault-demo is at the FRONT of sys.path so its main.py wins
+    repo_str = str(OPVAULT_REPO)
+    if repo_str in sys.path:
+        sys.path.remove(repo_str)
+    sys.path.insert(0, repo_str)
+
+    # Evict any cached 'main' module (e.g. CTV's main.py from a previous
+    # covenant run in the same process).  Without this, `import main` returns
+    # the stale module from sys.modules instead of opvault-demo's main.py.
+    if "main" in sys.modules:
+        cached = sys.modules["main"]
+        cached_path = getattr(cached, "__file__", "") or ""
+        if repo_str not in cached_path:
+            del sys.modules["main"]
 
     # verystable must activate the softfork flags before any script work
     import verystable
@@ -130,9 +142,55 @@ class OPVaultAdapter(VaultAdapter):
         # Mine a few coinbases to the fee wallet
         self._ov_rpc.generatetoaddress(5, fee_addr)
         # Mature them
-        dummy = self._ov_rpc.getnewaddress() if self._has_default_wallet() else fee_addr
         self._ov_rpc.generatetoaddress(100, fee_addr)
         # Rescan so the fee wallet sees its UTXOs
+        self._fee_wallet.rescan()
+
+    def _ensure_fee_utxos(self, min_mature: int = 3):
+        """Ensure the fee wallet has enough mature UTXOs for upcoming operations.
+
+        The upstream SingleAddressWallet.get_utxo() requires UTXOs with 100+
+        confirmations (coinbase maturity).  Each trigger, recovery, or revault
+        consumes one fee UTXO.  After several rapid operations the mature pool
+        is depleted — change UTXOs exist but haven't reached 100 confirmations.
+
+        This method rescans the fee wallet, counts mature UTXOs, and if below
+        `min_mature`, mines enough blocks (to the fee wallet address) to mature
+        the oldest immature coinbases.  This is the OP_VAULT equivalent of
+        CTV's _ensure_bank().
+        """
+        fee_addr = self._fee_wallet.fee_addr
+        self._fee_wallet.rescan()
+        height = self._ov_rpc.getblockcount()
+
+        # Count UTXOs that are mature AND not locked
+        locked = self._fee_wallet.locked_utxos
+        mature = [
+            u for u in self._fee_wallet.utxos
+            if u.outpoint not in locked and (height - u.height) >= 100
+        ]
+
+        if len(mature) >= min_mature:
+            return  # Plenty of mature coins available
+
+        # Find how many blocks we need to mine to mature the oldest immature
+        # unlocked UTXO.  Mine a few extra so we don't hit this path every op.
+        immature = [
+            u for u in self._fee_wallet.utxos
+            if u.outpoint not in locked and (height - u.height) < 100
+        ]
+
+        if immature:
+            # Mine enough to mature the oldest immature UTXO, plus a buffer
+            oldest = min(immature, key=lambda u: u.height)
+            blocks_needed = 100 - (height - oldest.height) + 1
+            # Also mine a few fresh coinbases for good measure
+            self._ov_rpc.generatetoaddress(blocks_needed + 5, fee_addr)
+        else:
+            # No UTXOs at all — mine fresh coinbases and mature them
+            self._ov_rpc.generatetoaddress(5, fee_addr)
+            self._ov_rpc.generatetoaddress(100, fee_addr)
+
         self._fee_wallet.rescan()
 
     def _has_default_wallet(self) -> bool:
@@ -259,7 +317,7 @@ class OPVaultAdapter(VaultAdapter):
         from verystable.script import CTransaction
         from verystable import core
 
-        self._fee_wallet.rescan()
+        self._ensure_fee_utxos()
         fee_utxo = self._fee_wallet.get_utxo()
 
         dest_spk = addr_mod.address_to_scriptpubkey(address)
@@ -342,8 +400,8 @@ class OPVaultAdapter(VaultAdapter):
                 f"{config.trigger_xpub_path_prefix}/{vault_num}")
             return core.key.sign_schnorr(privkey, msg)
 
-        # Refresh fee wallet
-        self._fee_wallet.rescan()
+        # Refresh fee wallet — ensure mature UTXOs for the fee input
+        self._ensure_fee_utxos()
 
         # Build trigger spec
         trigger_spec = self.ov.start_withdrawal(
@@ -379,42 +437,62 @@ class OPVaultAdapter(VaultAdapter):
     def complete_withdrawal(self, unvault: UnvaultState, path: str = "hot") -> TxRecord:
         """Complete the withdrawal after the spend delay.
 
-        Hot path: mine spend_delay blocks, then broadcast the CTV-locked
-                  final withdrawal transaction.
-        Cold path: broadcast recovery transaction (immediate, no delay).
+        path="hot":  Mine spend_delay blocks, then broadcast the CTV-locked
+                     final withdrawal transaction.  This is the normal path.
+        path="cold": Delegates to recover().  OP_VAULT has no distinct
+                     cold-sweep tx — authorized recovery IS the cold path.
+                     Prefer calling recover() directly in new code.
         """
-        trigger_spec = unvault.extra["trigger_spec"]
-        config = unvault.extra["config"]
-        metadata = unvault.extra["metadata"]
-        monitor = unvault.extra["monitor"]
-
-        if path == "hot":
-            # Mine blocks to satisfy spend_delay
-            self._ov_rpc.generatetoaddress(
-                self.block_delay, self._fee_wallet.fee_addr)
-
-            # Broadcast the final withdrawal tx (CTV template)
-            assert trigger_spec.withdrawal_tx
-            try:
-                self._ov_rpc.sendrawtransaction(trigger_spec.withdrawal_tx.tohex())
-            except Exception as e:
-                if "-27" not in str(e):
-                    raise
-
-            # Mine to confirm
-            self._ov_rpc.generatetoaddress(1, self._fee_wallet.fee_addr)
-
-            return TxRecord(
-                txid=trigger_spec.withdrawal_tx.rehash(),
-                label="withdraw",
-                amount_sats=unvault.amount_sats,
-            )
-        else:
-            # Cold recovery: recover the triggered UTXO
+        if path == "cold":
+            # OP_VAULT has no separate cold-sweep transaction.  "Cold" maps
+            # to authorized recovery, which is the same as recover().
+            # This shim exists for CTV-style callers; new experiments should
+            # call recover() directly.
             return self._do_recovery(unvault, from_vault=False)
 
+        if path != "hot":
+            raise ValueError(
+                f"OP_VAULT complete_withdrawal accepts 'hot' or 'cold', "
+                f"got {path!r}"
+            )
+
+        trigger_spec = unvault.extra["trigger_spec"]
+
+        # Mine blocks to satisfy spend_delay
+        self._ov_rpc.generatetoaddress(
+            self.block_delay, self._fee_wallet.fee_addr)
+
+        # Broadcast the final withdrawal tx (CTV template)
+        assert trigger_spec.withdrawal_tx
+        try:
+            self._ov_rpc.sendrawtransaction(trigger_spec.withdrawal_tx.tohex())
+        except Exception as e:
+            if "-27" not in str(e):
+                raise
+
+        # Mine to confirm
+        self._ov_rpc.generatetoaddress(1, self._fee_wallet.fee_addr)
+
+        return TxRecord(
+            txid=trigger_spec.withdrawal_tx.rehash(),
+            label="withdraw",
+            amount_sats=unvault.amount_sats,
+        )
+
     def recover(self, state) -> TxRecord:
-        """Execute emergency recovery from vault or triggered state."""
+        """Execute authorized recovery from vault or triggered state.
+
+        Works from either VaultState (untriggered) or UnvaultState (triggered).
+        Both states carry a ``"recover"`` leaf in their taproot tree with the
+        same recovery script (recoveryauth_pubkey CHECKSIGVERIFY + OP_VAULT_RECOVER).
+
+        Upstream verification:
+            - VaultSpec.taproot_info: leaves = ["recover", "trigger"]
+            - TriggerSpec.taproot_info: leaves = ["recover", "withdraw"]
+            - get_recovery_tx() calls utxo.get_taproot_info().leaves["recover"]
+              which resolves correctly for both VaultUtxo(vault_spec=...) and
+              VaultUtxo(trigger_spec=...).
+        """
         from_vault = isinstance(state, VaultState)
         return self._do_recovery(state, from_vault=from_vault)
 
@@ -422,6 +500,12 @@ class OPVaultAdapter(VaultAdapter):
         """Recover funds to the recovery address.
 
         Uses get_recovery_tx() from the upstream code.
+
+        Args:
+            from_vault: If True, recover untriggered vault UTXOs
+                        (chain_state.vault_utxos).  If False, recover
+                        triggered UTXOs (chain_state.trigger_utxos +
+                        theft_trigger_utxos).
         """
         config = state.extra["config"]
         monitor = state.extra["monitor"]
@@ -448,8 +532,8 @@ class OPVaultAdapter(VaultAdapter):
         def recoveryauth_signer(msg: bytes) -> bytes:
             return core.key.sign_schnorr(recovery_privkey, msg)
 
-        # Refresh fee wallet
-        self._fee_wallet.rescan()
+        # Refresh fee wallet — ensure mature UTXOs for the fee input
+        self._ensure_fee_utxos()
 
         recovery_spec = self.ov.get_recovery_tx(
             config, self._fee_wallet, utxos, recoveryauth_signer
@@ -485,6 +569,197 @@ class OPVaultAdapter(VaultAdapter):
         combining them into a single trigger transaction.
         """
         return True
+
+    def trigger_revault(self, vault: VaultState, withdraw_sats: int) -> tuple:
+        """Trigger a partial withdrawal with automatic revault of remainder.
+
+        OP_VAULT's start_withdrawal() automatically creates a revault output
+        when the vault UTXOs exceed the destination amount.  This method
+        withdraws `withdraw_sats` and revaults the rest.
+
+        Returns (UnvaultState, VaultState) — the unvaulting portion and
+        the revaulted remainder.
+        """
+        metadata = vault.extra["metadata"]
+        config = vault.extra["config"]
+        monitor = vault.extra["monitor"]
+
+        # Pick a destination address
+        fee_addr = self._fee_wallet.fee_addr
+        dest = self.ov.PaymentDestination(fee_addr, withdraw_sats)
+
+        # Get available vault UTXOs from the chain state
+        chain_state = monitor.rescan()
+        vault_utxos = list(chain_state.vault_utxos.values())
+        assert vault_utxos, "No vault UTXOs found after rescan"
+
+        # Coin selection: find the UTXO matching our vault
+        target_txid = vault.vault_txid
+        matching = [u for u in vault_utxos
+                    if hasattr(u, "outpoint") and target_txid in str(u.outpoint)]
+        if matching:
+            vault_utxos = matching[:1]
+        else:
+            vault_utxos = [min(vault_utxos,
+                               key=lambda u: abs(u.value_sats - vault.amount_sats))]
+
+        # Load trigger signing key
+        secd = json.loads(config.secrets_filepath.read_text())[config.id]
+        from bip32 import BIP32
+        trig_b32 = BIP32.from_xpriv(secd['trigger_xpriv'])
+        from verystable import core
+
+        def trigger_key_signer(msg: bytes, vault_num: int) -> bytes:
+            privkey = trig_b32.get_privkey_from_path(
+                f"{config.trigger_xpub_path_prefix}/{vault_num}")
+            return core.key.sign_schnorr(privkey, msg)
+
+        # Refresh fee wallet — ensure mature UTXOs for the fee input
+        self._ensure_fee_utxos()
+
+        # Build trigger spec — start_withdrawal auto-revaults remainder
+        trigger_spec = self.ov.start_withdrawal(
+            config, self._fee_wallet, vault_utxos, dest, trigger_key_signer
+        )
+
+        # Register with metadata
+        metadata.triggers[trigger_spec.id] = trigger_spec
+        metadata.save()
+
+        # Broadcast the trigger transaction
+        assert trigger_spec.trigger_tx
+        try:
+            self._ov_rpc.sendrawtransaction(trigger_spec.trigger_tx.tohex())
+        except Exception as e:
+            if "-27" not in str(e):
+                raise
+
+        # Mine to confirm
+        self._ov_rpc.generatetoaddress(1, self._fee_wallet.fee_addr)
+
+        # Rescan to pick up the new state (revault UTXO + trigger UTXO)
+        chain_state = monitor.rescan()
+
+        # Compute remainder amount
+        remainder_sats = vault.amount_sats - withdraw_sats - 2 * self.ov.FEE_VALUE_SATS
+        assert remainder_sats > 0, (
+            f"No remainder after withdrawing {withdraw_sats} from {vault.amount_sats}"
+        )
+
+        # Find the revault UTXO (new vault UTXO created by the trigger)
+        new_vault_utxos = list(chain_state.vault_utxos.values())
+        # The revault UTXO should be the one that appeared after our trigger
+        revault_txid = trigger_spec.trigger_tx.rehash()
+
+        unvault_state = UnvaultState(
+            unvault_txid=revault_txid,
+            amount_sats=withdraw_sats,
+            blocks_remaining=self.block_delay,
+            extra={
+                **vault.extra,
+                "trigger_spec": trigger_spec,
+                "chain_state": chain_state,
+            },
+        )
+
+        # Build the new VaultState for the revaulted remainder
+        new_vault_state = VaultState(
+            vault_txid=revault_txid,
+            amount_sats=remainder_sats,
+            vault_address=vault.vault_address,
+            extra={
+                **vault.extra,
+                "chain_state": chain_state,
+            },
+        )
+
+        return (unvault_state, new_vault_state)
+
+    def trigger_batched(self, vaults: List[VaultState]) -> UnvaultState:
+        """Trigger multiple vault UTXOs in a single transaction.
+
+        OP_VAULT's start_withdrawal() accepts a list of VaultUtxo objects,
+        combining them into a single trigger transaction.
+        """
+        assert len(vaults) >= 1, "Need at least one vault to trigger"
+
+        # Use the first vault's metadata/config (all should share the same config)
+        metadata = vaults[0].extra["metadata"]
+        config = vaults[0].extra["config"]
+        monitor = vaults[0].extra["monitor"]
+
+        # Compute total amount across all vaults
+        total_amount = sum(v.amount_sats for v in vaults)
+
+        # Pick a destination
+        fee_addr = self._fee_wallet.fee_addr
+        withdraw_sats = total_amount - 2 * self.ov.FEE_VALUE_SATS
+        assert withdraw_sats > 0
+        dest = self.ov.PaymentDestination(fee_addr, withdraw_sats)
+
+        # Gather all vault UTXOs from chain state
+        chain_state = monitor.rescan()
+        all_vault_utxos = list(chain_state.vault_utxos.values())
+
+        # Match UTXOs to our vault set
+        selected_utxos = []
+        for v in vaults:
+            matching = [u for u in all_vault_utxos
+                        if hasattr(u, "outpoint") and v.vault_txid in str(u.outpoint)]
+            if matching:
+                selected_utxos.append(matching[0])
+            else:
+                # Fallback: closest in value
+                best = min(all_vault_utxos,
+                           key=lambda u: abs(u.value_sats - v.amount_sats))
+                selected_utxos.append(best)
+                all_vault_utxos.remove(best)
+
+        assert selected_utxos, "No vault UTXOs matched"
+
+        # Load trigger signing key
+        secd = json.loads(config.secrets_filepath.read_text())[config.id]
+        from bip32 import BIP32
+        trig_b32 = BIP32.from_xpriv(secd['trigger_xpriv'])
+        from verystable import core
+
+        def trigger_key_signer(msg: bytes, vault_num: int) -> bytes:
+            privkey = trig_b32.get_privkey_from_path(
+                f"{config.trigger_xpub_path_prefix}/{vault_num}")
+            return core.key.sign_schnorr(privkey, msg)
+
+        # Refresh fee wallet — ensure mature UTXOs for the fee input
+        self._ensure_fee_utxos()
+
+        # Build batched trigger
+        trigger_spec = self.ov.start_withdrawal(
+            config, self._fee_wallet, selected_utxos, dest, trigger_key_signer
+        )
+
+        metadata.triggers[trigger_spec.id] = trigger_spec
+        metadata.save()
+
+        # Broadcast
+        assert trigger_spec.trigger_tx
+        try:
+            self._ov_rpc.sendrawtransaction(trigger_spec.trigger_tx.tohex())
+        except Exception as e:
+            if "-27" not in str(e):
+                raise
+
+        # Mine to confirm
+        self._ov_rpc.generatetoaddress(1, self._fee_wallet.fee_addr)
+
+        return UnvaultState(
+            unvault_txid=trigger_spec.trigger_tx.rehash(),
+            amount_sats=withdraw_sats,
+            blocks_remaining=self.block_delay,
+            extra={
+                **vaults[0].extra,
+                "trigger_spec": trigger_spec,
+                "chain_state": monitor.rescan(),
+            },
+        )
 
     def supports_keyless_recovery(self) -> bool:
         """OP_VAULT uses authorized recovery (recoveryauth key required).
