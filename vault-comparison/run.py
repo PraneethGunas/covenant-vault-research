@@ -71,6 +71,7 @@ import experiments.exp_watchtower_exhaustion
 import experiments.exp_fee_sensitivity
 import experiments.exp_opvault_recovery_auth
 import experiments.exp_opvault_trigger_key_theft
+import experiments.exp_ccv_mode_bypass
 
 
 def get_adapter(covenant: str):
