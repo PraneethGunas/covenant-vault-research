@@ -1,21 +1,22 @@
-# Node Setup Context — `vaults with covenants experiments`
+# Node Setup Context — Bitcoin Covenant Vault Comparison
 
 This document captures the local Bitcoin node environment used by this workspace, including branch state, RPC/datadir assumptions, helper scripts, and operational workflow.
 
 It is intended as a reproducible setup reference for running:
 
-- CTV-oriented experiments (`simple-ctv-vault`, `simple-op-vault`)
+- CTV-oriented experiments (`simple-ctv-vault`)
 - MATT/CCV experiments (`pymatt`)
+- OP_VAULT experiments (`simple-op-vault`)
 
 ## 1. Local Layout
 
 ### 1.1 Workspace
 
-- Workspace root: `/Users/praneeth/Desktop/ctv experiments`
+- Workspace root: `/Users/praneeth/Desktop/research experiments`
 - Key local projects:
-  - `/Users/praneeth/Desktop/ctv experiments/simple-ctv-vault`
-  - `/Users/praneeth/Desktop/ctv experiments/simple-op-vault`
-  - `/Users/praneeth/Desktop/ctv experiments/pymatt`
+  - `simple-ctv-vault/`
+  - `simple-op-vault/`
+  - `pymatt/`
 
 ### 1.2 Node Source Trees
 
@@ -27,6 +28,12 @@ It is intended as a reproducible setup reference for running:
   - Path: `/Users/praneeth/merkleize-bitcoin-ccv`
   - Current branch (last verified): `inq-ccv`
   - Current commit (last verified): `f2b542cf95`
+- OP_VAULT bitcoin tree:
+  - Path: `/Users/praneeth/bitcoin-opvault`
+  - Branch: `2023-02-opvault-inq`
+  - Build system: autotools (not cmake)
+  - Build: `arch -x86_64 bash -c './autogen.sh && ./configure --without-miniupnpc && make -j$(nproc)'`
+  - Binaries: `src/bitcoind`, `src/bitcoin-cli`
 
 ## 2. Node Binaries and Runtime
 
@@ -55,13 +62,14 @@ Important: both node variants share this datadir/port model, and switching wipes
 
 Script path:
 
-- `/Users/praneeth/Desktop/ctv experiments/switch-node.sh`
+- `switch-node.sh` (workspace root)
 
 Usage:
 
 ```bash
 ./switch-node.sh inquisition
 ./switch-node.sh ccv
+./switch-node.sh opvault
 ```
 
 Behavior summary:
@@ -107,7 +115,7 @@ Configured values:
 
 File:
 
-- `/Users/praneeth/Desktop/ctv experiments/pymatt/.env`
+- `pymatt/.env`
 
 Values:
 
@@ -120,8 +128,8 @@ Values:
 
 Files:
 
-- `/Users/praneeth/Desktop/ctv experiments/pymatt/examples/init.sh`
-- `/Users/praneeth/Desktop/ctv experiments/pymatt/examples/fund.sh`
+- `pymatt/examples/init.sh`
+- `pymatt/examples/fund.sh`
 
 Both scripts use `bitcoin-cli` from `PATH` by default and can be configured with:
 
@@ -150,7 +158,7 @@ Last verified with current build:
 ### 7.1 Run MATT/CCV (and CTV-enabled) `pymatt` Vault Flows
 
 ```bash
-cd "/Users/praneeth/Desktop/ctv experiments"
+cd "/Users/praneeth/Desktop/research experiments"
 ./switch-node.sh ccv
 bash pymatt/examples/init.sh
 cd pymatt
@@ -161,7 +169,7 @@ uv run --no-sync python examples/vault/vault.py -m
 ### 7.2 Run Inquisition-Side Experiments
 
 ```bash
-cd "/Users/praneeth/Desktop/ctv experiments"
+cd "/Users/praneeth/Desktop/research experiments"
 ./switch-node.sh inquisition
 ```
 

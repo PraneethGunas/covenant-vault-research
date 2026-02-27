@@ -565,7 +565,19 @@ trigger_and_revault       210 vB       292 vB     +82      watchtower_exhaustion
 
 **Stability verification:** The watchtower_exhaustion experiment verified vsize constancy across 5 consecutive splits: trigger range=0 vB, recover range=0 vB. Vsize is structurally independent of vault balance — linear extrapolation from single-round measurements is valid.
 
-All fee_sensitivity constants have been updated to use the measured values. The corrected lifecycle total is 567 vB (was 484 vB), making OP_VAULT ~37% more expensive than CCV's 418 vB lifecycle.
+### 4.3 Three-Way Lifecycle Vsize Verification
+
+All three covenant lifecycle vsizes verified against regtest measurements (results/2026-02-24_141827/):
+
+```
+Covenant   tovault   trigger/unvault   withdraw   total    Script types
+────────   ───────   ───────────────   ────────   ─────    ──────────────────────────
+CTV        122 vB    94 vB             152 vB     368 vB   bare_ctv → bare_ctv → p2wsh (2-out)
+CCV        165 vB    154 vB            111 vB     430 vB   p2tr (2-out) → p2tr → p2tr
+OP_VAULT   154 vB    292 vB            121 vB     567 vB   p2tr (2-out) → p2tr (2-in/3-out) → p2tr_ctv
+```
+
+**CTV/CCV corrections (2026-02-24):** The initial fee_sensitivity constants used hand-estimated values (CTV total=426, CCV total=418). The lifecycle_costs measurement showed CTV is actually 58 vB cheaper (368 vs 426) because its bare CTV outputs are more compact than the assumed P2WSH wrapping, and its unvault witness is minimal (94 vs 164). CCV's deposit is 11 vB larger than estimated (165 vs 154) due to the 2-output structure. All fee_sensitivity constants updated to match measured values.
 
 ## 5. Adapter Details
 
