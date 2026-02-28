@@ -44,4 +44,5 @@ Thumbs.db
 .vscode/
 
 
-/alloy-models
+/formalization/alloy
+/formalization/covenant-vault-paper.pdf
