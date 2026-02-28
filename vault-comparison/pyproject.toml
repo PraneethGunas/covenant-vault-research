@@ -15,6 +15,15 @@ ccv = [
     "python-dotenv",
     "prompt-toolkit",
 ]
+opvault = [
+    "verystable @ git+https://github.com/jamesob/verystable",
+    "bip32",
+    "clii",
+    "rich",
+]
+all = [
+    "vault-comparison[ctv,ccv,opvault]",
+]
 
 [tool.setuptools.packages.find]
 include = ["harness*", "adapters*", "experiments*"]
