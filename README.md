@@ -19,10 +19,15 @@ research experiments/
 ├── switch-node.sh            # Node manager (Inquisition / CCV / OP_VAULT)
 ├── vault-comparison/         # Framework source
 │   ├── run.py                # CLI runner
+│   ├── run_full.sh           # Full pipeline (run all → analyze)
+│   ├── analyze_results.py    # Consolidated report generator
 │   ├── harness/              # Shared infra (RPC, metrics, reporting)
 │   ├── adapters/             # Vault drivers (CTV, CCV, OP_VAULT)
 │   ├── experiments/          # Experiment modules (12 experiments)
 │   └── results/              # Timestamped output (gitignored)
+├── formalization/             # Alloy models for covenant properties
+│   └── alloy/                # .als specs per covenant + cross-covenant
+├── site/                     # Interactive research site (separate repo)
 ├── simple-ctv-vault/         # CTV vault (upstream clone)
 ├── pymatt/                   # CCV vault (upstream clone)
 └── simple-op-vault/          # OP_VAULT demo (upstream clone)
@@ -171,6 +176,22 @@ Each adapter exposes the vault lifecycle through a common interface. Some capabi
 | Address reuse safe | No | Yes | Yes |
 | Fee mechanism | Anchor output | No anchors | Fee input |
 
+## Analysis Pipeline
+
+After running experiments, generate a consolidated analysis report:
+
+```bash
+cd vault-comparison
+
+# Run everything and generate the report in one step
+bash run_full.sh
+
+# Or generate from an existing results directory
+uv run analyze_results.py results/<timestamp_directory>
+```
+
+This produces `full_analysis.md` with lifecycle costs, security findings, capability comparisons, threat matrix, and key numbers. The report includes standardized regtest caveats separating structural measurements (vsize, valid on mainnet) from economic dynamics (fees, regtest-only).
+
 ## Output Structure
 
 Results are saved to timestamped directories under `vault-comparison/results/`:
@@ -200,6 +221,19 @@ python memory/research_memory.py search "fee pinning"       # Full-text search
 python memory/research_memory.py list-attacks --covenant CTV
 python memory/research_memory.py list-questions --status open
 ```
+
+## Formalization
+
+Alloy models in `formalization/alloy/` specify covenant properties (fund conservation, recovery guarantees, no-extraction invariants) and cross-covenant comparisons. Run all specs:
+
+```bash
+cd formalization/alloy
+bash run_all.sh
+```
+
+## Site
+
+An interactive research site lives in `site/` with its own git repo. It presents the threat models, measured evidence, and cross-covenant comparisons from the experiments. Hosted at [vaults-research-page](https://github.com/PraneethGunas/vaults-research-page).
 
 ## Further Reading
 
