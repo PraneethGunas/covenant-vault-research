@@ -22,6 +22,7 @@ fee_sensitivity_chart.html
 vault-comparison/fee_sensitivity_analysis.md
 vault-comparison/fee_sensitivity_chart.html
 vault-comparison/results/
+results/
 
 # === Python ===
 __pycache__/

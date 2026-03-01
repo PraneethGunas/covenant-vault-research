@@ -15,6 +15,10 @@ research experiments/
 ├── README.md                 # This file
 ├── REFERENCES.md             # Prior art and per-experiment citations
 ├── DESIGN.md                 # Architecture, threat models, experiment catalog
+├── Dockerfile                # Multi-stage build (3 Bitcoin nodes + framework)
+├── docker-compose.yml        # Single-command experiment runner
+├── Makefile                  # Build/run/test/analyze shortcuts
+├── entrypoint.sh             # Docker entrypoint with --help
 ├── switch-node.sh            # Node manager (Inquisition / CCV / OP_VAULT)
 ├── vault-comparison/         # Framework source
 │   ├── run.py                # CLI runner
@@ -32,42 +36,68 @@ research experiments/
 └── simple-op-vault/          # OP_VAULT demo (upstream clone)
 ```
 
-## Setup
+## Quick Start (Docker)
 
-Requires vault implementations as siblings:
+The fastest way to run everything. Builds all three Bitcoin nodes and the Python framework in a single image.
+
+```bash
+# Build (~45 min first time, cached after that)
+make build
+
+# Run a single experiment
+make lifecycle COVENANT=ctv
+
+# Run all core experiments across all covenants
+make run-all
+
+# List available experiments and tags
+make list
+
+# Interactive shell inside the container
+make shell
+```
+
+Requires Docker with at least 8 GB memory (Docker Desktop → Settings → Resources).
+
+Results are mounted to `./results/` on your host. See `make help` for all targets, or `docker run --rm vault-comparison --help` for the full command reference.
+
+## Manual Setup
+
+If you prefer running without Docker, clone the upstream repos and build the nodes yourself.
+
+### Dependencies
 
 ```bash
 # Clone upstream repos
-git clone https://github.com/AlejandroAkbal/simple-ctv-vault.git
+git clone https://github.com/jamesob/simple-ctv-vault.git
 git clone https://github.com/Merkleize/pymatt.git
 git clone https://github.com/jamesob/opvault-demo.git simple-op-vault
 ```
 
-Install dependencies:
+Install Python dependencies:
 
 ```bash
 cd vault-comparison
-uv pip install -e ".[ctv,ccv]"
+uv sync --extra all
 ```
 
 For OP_VAULT, install its dependencies separately:
 
 ```bash
-cd simple-op-vault
-pip install -r requirements.txt
+pip install -r simple-op-vault/requirements.txt
 ```
 
-## Node Requirements
+### Node Requirements
 
 Each adapter requires a specific Bitcoin node variant. Clone and build all three:
 
 ```bash
 # CTV — Bitcoin Inquisition
-git clone https://github.com/AlejandroAkbal/bitcoin-inquisition.git ~/bitcoin-inquisition
+git clone https://github.com/bitcoin-inquisition/bitcoin.git ~/bitcoin-inquisition
 cd ~/bitcoin-inquisition && cmake -B build && cmake --build build -j$(nproc)
 
 # CCV — Merkleize Bitcoin (inq-ccv branch)
-git clone -b inq-ccv https://github.com/AlejandroAkbal/merkleize-bitcoin.git ~/merkleize-bitcoin-ccv
+git clone -b inq-ccv https://github.com/Merkleize/bitcoin.git ~/merkleize-bitcoin-ccv
 cd ~/merkleize-bitcoin-ccv && cmake -B build && cmake --build build -j$(nproc)
 
 # OP_VAULT — jamesob/bitcoin (autotools, not cmake)

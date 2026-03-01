@@ -1,0 +1,18 @@
+services:
+  vault-comparison:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vault-comparison:latest
+    container_name: vault-comparison
+
+    environment:
+      - RPC_USER=rpcuser
+      - RPC_PASSWORD=rpcpass
+      - RPC_PORT=18443
+
+    volumes:
+      - ./results:/data/results
+
+    ports:
+      - "18443:18443"

@@ -22,7 +22,14 @@ opvault = [
     "rich",
 ]
 all = [
-    "vault-comparison[ctv,ccv,opvault]",
+    "python-bitcoinlib",
+    "clii",
+    "buidl @ git+https://github.com/buidl-bitcoin/buidl-python.git",
+    "python-dotenv",
+    "prompt-toolkit",
+    "verystable @ git+https://github.com/jamesob/verystable",
+    "bip32",
+    "rich",
 ]
 
 [tool.setuptools.packages.find]

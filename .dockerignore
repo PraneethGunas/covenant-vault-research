@@ -1,0 +1,48 @@
+# Git history
+.git
+**/.git
+
+# Python artifacts
+.venv
+**/.venv
+__pycache__
+**/__pycache__
+*.pyc
+*.egg-info
+
+# Results and chain state (generated at runtime)
+results/
+vault-comparison/results/
+
+# Agent/session files
+.claude/
+memory/
+agent.md
+
+# Upstream repos (cloned fresh in Dockerfile)
+simple-ctv-vault/
+pymatt/
+simple-op-vault/
+bitcoin-inquisition/
+bitcoin-opvault/
+
+# Site (separate repo)
+site/
+
+# Formalization (optional, not in default image)
+formalization/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Review docs
+PEER_REVIEW_vault_comparison.md
+setup-context.md
+fee_sensitivity_analysis.md
+fee_sensitivity_chart.html
