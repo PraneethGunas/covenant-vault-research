@@ -123,6 +123,28 @@ WT_BATCHED_RECOVERY_PER_INPUT = 67            # CCV per-input cost in batched re
 # measurement: individual 246 = 55 overhead + 191 per input).  CCV is 67 vB.
 # The difference reflects OP_VAULT's larger per-input witness (recoveryauth sig).
 
+# CAT+CSFS lifecycle (simple-cat-csfs-vault)
+# Trigger and withdraw VERIFIED via cat_csfs_hot_key_theft and cat_csfs_destination_lock
+# experiments on Inquisition regtest (results/2026-03-01_143838/).
+# Recovery VERIFIED via cat_csfs_cold_key_recovery experiment.
+# Tovault estimated from script structure (P2WPKH → P2TR, 1-in/1-out).
+#
+# Key structural notes:
+#   - tovault (~153 vB) is a standard P2WPKH → P2TR spend (estimated,
+#     pending verification via lifecycle_costs run on cat_csfs).
+#   - trigger (221 vB) uses the CSFS+CAT introspection leaf with the dual
+#     signature verification pattern.  Larger than CCV's 154 because the
+#     witness includes prefix (94B), suffix (37B), and two signatures.
+#   - withdraw (210 vB) uses the same CSFS+CAT pattern with CSV delay.
+#     Slightly smaller than trigger because the vault-loop taptree differs.
+#   - recover (125 vB) is a simple cold_pk OP_CHECKSIG (no introspection).
+#     Very lightweight — comparable to CCV's keyless recovery (122 vB).
+CATCSFS_TOVAULT_VSIZE = 153      # P2WPKH → P2TR (estimated, pending measurement)
+CATCSFS_TRIGGER_VSIZE = 221      # CSFS+CAT trigger leaf (dual sig verification)
+CATCSFS_WITHDRAW_VSIZE = 210     # CSFS+CAT withdraw leaf (after CSV)
+CATCSFS_RECOVER_VSIZE = 125      # cold_pk OP_CHECKSIG (no introspection)
+CATCSFS_LIFECYCLE_TOTAL = CATCSFS_TOVAULT_VSIZE + CATCSFS_TRIGGER_VSIZE + CATCSFS_WITHDRAW_VSIZE
+
 # Legacy aliases for backward compat in existing analysis code
 WT_TRIGGER_VSIZE = WT_CCV_TRIGGER_VSIZE
 WT_RECOVER_VSIZE = WT_CCV_RECOVER_VSIZE
@@ -221,36 +243,45 @@ def _section_lifecycle_costs(result):
     result.observe(f"  OP_VAULT lifecycle: {OPV_LIFECYCLE_TOTAL} vB "
                    f"(tovault={OPV_TOVAULT_VSIZE} + trigger={OPV_TRIGGER_VSIZE} "
                    f"+ withdraw={OPV_WITHDRAW_VSIZE})")
+    result.observe(f"  CAT+CSFS lifecycle: {CATCSFS_LIFECYCLE_TOTAL} vB "
+                   f"(tovault~={CATCSFS_TOVAULT_VSIZE} + trigger={CATCSFS_TRIGGER_VSIZE} "
+                   f"+ withdraw={CATCSFS_WITHDRAW_VSIZE})")
     ccv_saves = CTV_LIFECYCLE_TOTAL - CCV_LIFECYCLE_TOTAL
     ccv_pct = ccv_saves / CTV_LIFECYCLE_TOTAL * 100 if CTV_LIFECYCLE_TOTAL else 0
     opv_diff = OPV_LIFECYCLE_TOTAL - CCV_LIFECYCLE_TOTAL
+    catcsfs_diff = CATCSFS_LIFECYCLE_TOTAL - CCV_LIFECYCLE_TOTAL
     result.observe(f"  CCV vs CTV: CCV saves {ccv_saves} vB ({ccv_pct:.1f}%)")
     result.observe(f"  OP_VAULT vs CCV: OP_VAULT costs {opv_diff:+d} vB "
                    f"({'more' if opv_diff > 0 else 'less'} due to fee input overhead)")
+    result.observe(f"  CAT+CSFS vs CCV: CAT+CSFS costs {catcsfs_diff:+d} vB "
+                   f"({'more' if catcsfs_diff > 0 else 'less'} due to CSFS+CAT witness overhead)")
 
     # Table
-    result.observe(f"\n{'Fee Rate':>12} {'Period':<30} {'CTV Cost':>12} {'CCV Cost':>12} {'OPV Cost':>12} {'Cheapest':>10} {'as % vault':>12}")
-    result.observe("-" * 100)
+    result.observe(f"\n{'Fee Rate':>12} {'Period':<30} {'CTV Cost':>12} {'CCV Cost':>12} {'OPV Cost':>12} {'CATCSFS Cost':>14} {'Cheapest':>10} {'as % vault':>12}")
+    result.observe("-" * 120)
 
     for rate, period in FEE_ENVIRONMENTS:
         ctv_cost = CTV_LIFECYCLE_TOTAL * rate
         ccv_cost = CCV_LIFECYCLE_TOTAL * rate
         opv_cost = OPV_LIFECYCLE_TOTAL * rate
-        cheapest = "CCV" if ccv_cost <= min(ctv_cost, opv_cost) else ("CTV" if ctv_cost <= opv_cost else "OPV")
-        pct_vault = max(ctv_cost, opv_cost) / VAULT_AMOUNT_SATS * 100
+        catcsfs_cost = CATCSFS_LIFECYCLE_TOTAL * rate
+        costs = {"CTV": ctv_cost, "CCV": ccv_cost, "OPV": opv_cost, "CATCSFS": catcsfs_cost}
+        cheapest = min(costs, key=costs.get)
+        pct_vault = max(costs.values()) / VAULT_AMOUNT_SATS * 100
         result.observe(
             f"{rate:>8} s/vB  {period:<30} {_fmt_sats(ctv_cost):>12} {_fmt_sats(ccv_cost):>12} "
-            f"{_fmt_sats(opv_cost):>12} {cheapest:>10} {pct_vault:>10.3f}%"
+            f"{_fmt_sats(opv_cost):>12} {_fmt_sats(catcsfs_cost):>14} {cheapest:>10} {pct_vault:>10.3f}%"
         )
 
     result.observe(
         f"\nINSIGHT: At 500 sat/vB (stress), lifecycle costs: "
         f"CTV={_fmt_sats(CTV_LIFECYCLE_TOTAL * 500)}, "
         f"CCV={_fmt_sats(CCV_LIFECYCLE_TOTAL * 500)}, "
-        f"OP_VAULT={_fmt_sats(OPV_LIFECYCLE_TOTAL * 500)} sats.  "
-        f"OP_VAULT's fee-input model adds overhead vs CCV but avoids anchor "
-        f"output risks.  Lifecycle cost becomes material above ~100 sat/vB "
-        f"for sub-BTC vaults."
+        f"OP_VAULT={_fmt_sats(OPV_LIFECYCLE_TOTAL * 500)}, "
+        f"CAT+CSFS={_fmt_sats(CATCSFS_LIFECYCLE_TOTAL * 500)} sats.  "
+        f"CAT+CSFS is slightly more expensive than OP_VAULT due to the "
+        f"CSFS+CAT dual-verification witness overhead (221 vB trigger, 210 vB withdraw).  "
+        f"Lifecycle cost becomes material above ~100 sat/vB for sub-BTC vaults."
     )
 
 
@@ -398,6 +429,27 @@ def _section_recovery_griefing(result):
         "with hot+fee key can escalate to fund theft (fee_pinning) under "
         "current relay policy (mitigable by TRUC/v3).  CCV griefing is "
         "liveness-only but can impose indefinite withdrawal delays."
+    )
+
+    # CAT+CSFS griefing
+    result.observe("\n--- CAT+CSFS: Hot-Key Trigger Griefing ---")
+    result.observe(
+        f"Attacker cost per round: {CATCSFS_TRIGGER_VSIZE} vB (trigger to vault-loop, needs HOT KEY)"
+    )
+    result.observe(
+        f"Defender cost per round: {CATCSFS_RECOVER_VSIZE} vB (cold key recovery)"
+    )
+    catcsfs_asymmetry = CATCSFS_TRIGGER_VSIZE / CATCSFS_RECOVER_VSIZE if CATCSFS_RECOVER_VSIZE else 1
+    result.observe(
+        f"Cost asymmetry: {catcsfs_asymmetry:.2f}x "
+        f"({'attacker pays MORE' if catcsfs_asymmetry > 1 else 'defender pays MORE'})"
+    )
+    result.observe(
+        "KEY DIFFERENCE from other designs: CAT+CSFS hot key can ONLY trigger "
+        "to the pre-committed vault-loop address.  It CANNOT redirect funds or "
+        "choose a different destination.  Griefing is the MAXIMUM damage from "
+        "hot key compromise — no escalation to fund theft is possible.  "
+        "However, recovery requires the COLD KEY (single point of failure)."
     )
 
 
@@ -582,6 +634,28 @@ def _section_synthesis(result):
         f"{_fmt_sats(CTV_UNVAULT_VSIZE * 500 * 10):>14}"
     )
 
+    # CAT+CSFS hot-key griefing (griefing-only, no theft path)
+    result.observe(
+        f"{'Hot-key griefing (CAT+CSFS)':>35} {'LOW':>12} {'LOW':>12} {'MODERATE':>12} {'MODERATE':>14}"
+    )
+    result.observe(
+        f"{'  10-round attacker cost':>35} {_fmt_sats(CATCSFS_TRIGGER_VSIZE * 1 * 10):>12} "
+        f"{_fmt_sats(CATCSFS_TRIGGER_VSIZE * 50 * 10):>12} "
+        f"{_fmt_sats(CATCSFS_TRIGGER_VSIZE * 300 * 10):>12} "
+        f"{_fmt_sats(CATCSFS_TRIGGER_VSIZE * 500 * 10):>14}"
+    )
+
+    # CAT+CSFS cold key compromise
+    result.observe(
+        f"{'Cold key theft (CAT+CSFS)':>35} {'CRITICAL':>12} {'CRITICAL':>12} {'CRITICAL':>12} {'CRITICAL':>14}"
+    )
+    result.observe(
+        f"{'  theft cost':>35} {_fmt_sats(CATCSFS_RECOVER_VSIZE * 1):>12} "
+        f"{_fmt_sats(CATCSFS_RECOVER_VSIZE * 50):>12} "
+        f"{_fmt_sats(CATCSFS_RECOVER_VSIZE * 300):>12} "
+        f"{_fmt_sats(CATCSFS_RECOVER_VSIZE * 500):>14}"
+    )
+
     # Key findings
     result.observe("\n--- Key Findings ---")
 
@@ -705,6 +779,20 @@ def _section_synthesis(result):
         "   anti-griefing property: trading a griefing surface for a "
         "   key-loss surface."
     )
+    result.observe(
+        "   CAT+CSFS worst case: cold key compromise → immediate, unrestricted "
+        "   fund theft (no covenant protection on recovery path).  Hot key "
+        "   compromise → griefing only (trigger to vault-loop, defender sweeps "
+        "   with cold key).  No revault, no batching, rigid destination."
+    )
+    result.observe(
+        "   CAT+CSFS UNIQUE PROPERTY: The dual CSFS+CHECKSIG verification "
+        "   creates a structural impossibility of output redirection.  The hot "
+        "   key is strictly less powerful than in ANY other design — it can "
+        "   only trigger to the embedded vault-loop address.  This is the "
+        "   safest hot-key profile, but comes at the cost of the least "
+        "   protected cold-key path."
+    )
 
     # ── Design Space ──────────────────────────────────────────────────
     result.observe("\n--- Design Space: Flexibility / Security / Complexity ---")
@@ -715,16 +803,19 @@ def _section_synthesis(result):
         "keys and moving parts must be managed correctly)."
     )
     result.observe(
-        "\n                  FLEXIBILITY    SECURITY           COMPLEXITY"
+        "\n                  FLEXIBILITY    SECURITY           COMPLEXITY     HOT-KEY SAFETY  COLD-KEY SAFETY"
     )
     result.observe(
-        "   CTV            Low            High (conditional) Low"
+        "   CTV            Low            High (conditional) Low            Conditional     N/A (no cold key)"
     )
     result.observe(
-        "   CCV            High           Moderate           Low"
+        "   CCV            High           Moderate           Low            Moderate        High (keyless)"
     )
     result.observe(
-        "   OP_VAULT       High           High               High"
+        "   OP_VAULT       High           High               High           Moderate        High (pre-committed)"
+    )
+    result.observe(
+        "   CAT+CSFS       Low            Moderate           Moderate       Highest         Low (unconstrained)"
     )
     result.observe(
         "\n   CTV — SIMPLEST, MOST RESTRICTIVE"
@@ -776,10 +867,34 @@ def _section_synthesis(result):
         "   trust requirement).  BIP-32 key hierarchy adds derivation logic."
     )
     result.observe(
+        "\n   CAT+CSFS — STRONGEST HOT-KEY SAFETY, WEAKEST COLD-KEY SAFETY"
+    )
+    result.observe(
+        "   Flexibility: No partial withdrawal, no revault, no batching.  "
+        "   Single pre-committed destination (fixed at vault creation)."
+    )
+    result.observe(
+        "   Security: The dual CSFS+CHECKSIG verification makes hot key "
+        "   compromise harmless beyond griefing — the hot key CANNOT redirect "
+        "   funds to a different destination.  This is the strongest hot-key "
+        "   theft resistance of any design.  But the cold key recovery path "
+        "   (simple OP_CHECKSIG) has NO covenant constraint — cold key "
+        "   compromise means immediate, unrestricted fund theft."
+    )
+    result.observe(
+        "   Complexity: Two keys (hot, cold).  No separate recovery "
+        "   authorization.  Moderate script complexity (CSFS+CAT introspection "
+        "   adds witness overhead but no additional key management)."
+    )
+    result.observe(
         "\n   TRADEOFF SUMMARY: CTV trades flexibility for simplicity.  "
         "CCV trades griefing resistance for guaranteed fund safety.  "
         "OP_VAULT trades key management complexity for the strongest "
-        "security profile — but only if all keys are managed correctly."
+        "security profile — but only if all keys are managed correctly.  "
+        "CAT+CSFS trades cold-key safety for the strongest hot-key "
+        "theft resistance — the embedded sha_single_output makes output "
+        "redirection impossible, but the unconstrained recovery leaf "
+        "makes cold key compromise catastrophic."
     )
 
     # ── Deployment guidance ────────────────────────────────────────────
@@ -792,7 +907,11 @@ def _section_synthesis(result):
         "   Institutional cold storage with dedicated security teams → "
         "   OP_VAULT's full defense suite, IF the organization can maintain "
         "   recoveryauth key availability.  Low-value automated vaults → "
-        "   CTV's simplicity minimizes operational failure modes."
+        "   CTV's simplicity minimizes operational failure modes.  "
+        "   Hot-key-heavy environments (delegated operations, remote signing) → "
+        "   CAT+CSFS's structural hot-key binding prevents escalation from "
+        "   hot key compromise to fund theft, but requires robust cold key "
+        "   management (HSM, multisig, geographic distribution)."
     )
 
 
@@ -814,6 +933,10 @@ def _record_structural_metrics(result):
         ("opv_recover", OPV_RECOVER_VSIZE, "p2tr_opvault"),
         ("opv_trigger_revault", OPV_TRIGGER_REVAULT_VSIZE, "p2tr_opvault"),
         ("fee_pin_chain", FEE_PIN_TOTAL_CHAIN_VSIZE, "p2wpkh"),
+        ("catcsfs_tovault", CATCSFS_TOVAULT_VSIZE, "p2tr"),
+        ("catcsfs_trigger", CATCSFS_TRIGGER_VSIZE, "p2tr_cat_csfs"),
+        ("catcsfs_withdraw", CATCSFS_WITHDRAW_VSIZE, "p2tr_cat_csfs"),
+        ("catcsfs_recover", CATCSFS_RECOVER_VSIZE, "p2tr_checksig"),
     ]
 
     for label, vsize, script_type in metrics_data:
