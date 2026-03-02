@@ -72,6 +72,10 @@ import experiments.exp_fee_sensitivity
 import experiments.exp_opvault_recovery_auth
 import experiments.exp_opvault_trigger_key_theft
 import experiments.exp_ccv_mode_bypass
+import experiments.exp_cat_csfs_hot_key_theft
+import experiments.exp_cat_csfs_witness_manipulation
+import experiments.exp_cat_csfs_destination_lock
+import experiments.exp_cat_csfs_cold_key_recovery
 
 
 def get_adapter(covenant: str):
@@ -85,6 +89,9 @@ def get_adapter(covenant: str):
     elif covenant == "opvault":
         from adapters.opvault_adapter import OPVaultAdapter
         return OPVaultAdapter()
+    elif covenant == "cat_csfs":
+        from adapters.cat_csfs_adapter import CATCSFSAdapter
+        return CATCSFSAdapter()
     else:
         raise ValueError(f"Unknown covenant type: {covenant}")
 
@@ -109,7 +116,12 @@ def connect_rpc() -> RegTestRPC:
     return rpc
 
 
-COVENANT_TO_NODE = {"ctv": "inquisition", "ccv": "ccv", "opvault": "opvault"}
+COVENANT_TO_NODE = {
+    "ctv": "inquisition",
+    "ccv": "ccv",
+    "opvault": "opvault",
+    "cat_csfs": "inquisition",
+}
 SWITCH_SCRIPT = PROJECT_ROOT.parent / "switch-node.sh"
 
 
@@ -317,7 +329,7 @@ def cmd_run(args):
 
     # Determine covenants
     if args.covenant in ("all", "all_covenants"):
-        covenants = ["ctv", "ccv", "opvault"]
+        covenants = ["ctv", "ccv", "opvault", "cat_csfs"]
     elif args.covenant == "both":
         covenants = ["ctv", "ccv"]
     else:
@@ -395,13 +407,13 @@ def cmd_run(args):
             csv = sweep_table.to_csv(result, pattern, param_name.lower().replace(" ", "_"))
             reporter.save_sweep(exp_name, cov, table, csv)
 
-        # Cross-covenant comparison table
-        if "ctv" in results and "ccv" in results:
-            comp_table = sweep_table.build_comparison_table(
-                results["ctv"], results["ccv"], pattern, param_name
+        # Cross-covenant comparison table (all covenants that have results)
+        if len(results) >= 2:
+            comp_table = sweep_table.build_multi_comparison_table(
+                results, pattern, param_name
             )
-            comp_csv = sweep_table.comparison_csv(
-                results["ctv"], results["ccv"], pattern,
+            comp_csv = sweep_table.multi_comparison_csv(
+                results, pattern,
                 param_name.lower().replace(" ", "_")
             )
             reporter.save_sweep(exp_name, "comparison", comp_table, comp_csv)
@@ -441,7 +453,7 @@ def cmd_compare(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Vault Comparison Runner — CTV vs CCV experiments",
+        description="Vault Comparison Runner — CTV vs CCV vs OP_VAULT vs CAT+CSFS experiments",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -460,10 +472,11 @@ def main():
     # run
     sub_run = subparsers.add_parser("run", help="Run experiments")
     sub_run.add_argument("experiment", nargs="?", help="Experiment name")
-    sub_run.add_argument("--covenant", choices=["ctv", "ccv", "opvault", "both", "all", "all_covenants"],
+    sub_run.add_argument("--covenant", choices=["ctv", "ccv", "opvault", "cat_csfs",
+                                                "both", "all", "all_covenants"],
                          default="ctv",
                          help="Which covenant to test (default: ctv). "
-                              "'all' runs CTV, CCV, and OP_VAULT. "
+                              "'all' runs CTV, CCV, OP_VAULT, and CAT+CSFS. "
                               "'both' is a legacy alias for CTV+CCV only.")
     sub_run.add_argument("--tag", help="Run all experiments with this tag")
     sub_run.add_argument("--all", action="store_true", help="Run all experiments")

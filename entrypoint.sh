@@ -20,8 +20,8 @@ show_help() {
 ════════════════════════════════════════════════════════════
 
 Commands:
-  run <experiment> --covenant <ctv|ccv|opvault|all>
-  run --tag <tag> --covenant <ctv|ccv|opvault|all>
+  run <experiment> --covenant <ctv|ccv|opvault|cat_csfs|all>
+  run --tag <tag> --covenant <ctv|ccv|opvault|cat_csfs|all>
   list                          List all experiments and tags
   analyze <results-dir>         Analyze a results directory
   bash                          Interactive shell
@@ -54,6 +54,7 @@ Covenants:
   ctv                           CTV (BIP 119) — Bitcoin Inquisition node
   ccv                           CCV (BIP 443) — Merkleize Bitcoin node
   opvault                       OP_VAULT (BIP 345) — jamesob/bitcoin node
+  cat_csfs                      CAT+CSFS (BIP 347 + BIP 348) — Bitcoin Inquisition node
   all                           Run on all applicable covenants (auto-switches nodes)
 
 Environment variables:
@@ -82,7 +83,7 @@ Examples:
   docker run -it vault-comparison bash
 
 Node binaries (inside container):
-  /opt/bitcoin-inquisition/     bitcoind + bitcoin-cli (CTV)
+  /opt/bitcoin-inquisition/     bitcoind + bitcoin-cli (CTV, CAT+CSFS)
   /opt/merkleize-bitcoin-ccv/   bitcoind + bitcoin-cli (CCV)
   /opt/bitcoin-opvault/         bitcoind + bitcoin-cli (OP_VAULT)
 EOF

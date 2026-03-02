@@ -21,6 +21,11 @@ opvault = [
     "clii",
     "rich",
 ]
+cat_csfs = [
+    "python-bitcoinlib",
+    "clii",
+    "buidl @ git+https://github.com/buidl-bitcoin/buidl-python.git",
+]
 all = [
     "python-bitcoinlib",
     "clii",

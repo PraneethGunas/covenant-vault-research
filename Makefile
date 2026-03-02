@@ -27,7 +27,7 @@ rebuild:                        ## Force rebuild from scratch (no cache)
 
 # ── Run — by covenant ───────────────────────────────────────
 
-.PHONY: run-all run-ctv run-ccv run-opvault
+.PHONY: run-all run-ctv run-ccv run-opvault run-cat-csfs
 
 run-all:                        ## Run all core experiments on all covenants
 	$(RUN) run --tag core --covenant all
@@ -40,6 +40,9 @@ run-ccv:                        ## Run all core experiments on CCV
 
 run-opvault:                    ## Run all core experiments on OP_VAULT
 	$(RUN) run --tag core --covenant opvault
+
+run-cat-csfs:                   ## Run all core experiments on CAT+CSFS
+	$(RUN) run --tag core --covenant cat_csfs
 
 # ── Run — by tag ────────────────────────────────────────────
 
@@ -117,7 +120,7 @@ list:                           ## List available experiments and tags
 
 # ── Testing ─────────────────────────────────────────────────
 
-.PHONY: test test-ctv test-ccv test-opvault
+.PHONY: test test-ctv test-ccv test-opvault test-cat-csfs
 
 test:                           ## Quick smoke test — lifecycle_costs on CTV
 	$(RUN) run lifecycle_costs --covenant ctv
@@ -133,6 +136,9 @@ test-ccv:                       ## Smoke test CCV (lifecycle + mode_bypass)
 test-opvault:                   ## Smoke test OP_VAULT (lifecycle + recovery_auth)
 	$(RUN) run lifecycle_costs --covenant opvault
 	$(RUN) run opvault_recovery_auth --covenant opvault
+
+test-cat-csfs:                  ## Smoke test CAT+CSFS (lifecycle)
+	$(RUN) run lifecycle_costs --covenant cat_csfs
 
 # ── Utilities ───────────────────────────────────────────────
 
