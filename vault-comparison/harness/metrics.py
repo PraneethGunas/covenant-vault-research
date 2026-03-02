@@ -110,7 +110,9 @@ class ComparisonResult:
     def delta(self, metric: str, label: str) -> Dict[str, Any]:
         """Compare a specific tx metric across covenants.
 
-        Returns dict like {"ctv": 180, "ccv": 154, "diff": 26, "pct": "16.9%"}
+        Returns dict with each covenant's value plus summary stats.
+        For 2 covenants: {"ctv": 180, "ccv": 154, "diff": 26, "pct": "16.9%"}
+        For N covenants: adds "min", "max", "range", "pct" (range/min %).
         """
         values = {}
         for cov, result in self.results.items():
@@ -119,11 +121,16 @@ class ComparisonResult:
 
         nums = {k: v for k, v in values.items() if v is not None}
         if len(nums) >= 2:
+            min_val = min(nums.values())
+            max_val = max(nums.values())
+            values["min"] = min_val
+            values["max"] = max_val
+            values["range"] = max_val - min_val
+            base = min_val if min_val else 1
+            values["pct"] = f"{(max_val - min_val) / base * 100:.1f}%"
+            # Legacy: diff between first two sorted covenants
             keys = sorted(nums.keys())
-            diff = nums[keys[0]] - nums[keys[1]]
-            base = nums[keys[1]] if nums[keys[1]] else 1
-            values["diff"] = diff
-            values["pct"] = f"{abs(diff) / base * 100:.1f}%"
+            values["diff"] = nums[keys[0]] - nums[keys[1]]
         return values
 
     def to_dict(self) -> Dict[str, Any]:
