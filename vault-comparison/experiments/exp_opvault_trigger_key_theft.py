@@ -102,6 +102,7 @@ TWO_KEY_CYCLES = 3  # repeated trigger→recover cycles for liveness denial
     name="opvault_trigger_key_theft",
     description="OP_VAULT trigger key theft: structural differentiators and two-key compromise",
     tags=["core", "opvault_specific", "security", "quantitative"],
+    required_covenants=["opvault"],
 )
 def run(adapter: VaultAdapter) -> ExperimentResult:
     result = ExperimentResult(

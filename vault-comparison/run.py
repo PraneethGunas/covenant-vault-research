@@ -11,7 +11,7 @@ Usage:
     # Run a single experiment (auto-switches node + initializes regtest)
     uv run run.py run lifecycle_costs --covenant ctv
 
-    # Run on all three covenants (CTV → CCV → OP_VAULT)
+    # Run on all covenants (CTV → CCV → OP_VAULT → CAT+CSFS)
     uv run run.py run lifecycle_costs --covenant all
 
     # Run all core experiments across all covenants
@@ -307,7 +307,7 @@ def cmd_run(args):
     if the node is already running.
 
     When --covenant all, runs experiments on CTV first (Inquisition),
-    then CCV (Merkleize), then OP_VAULT (opvault branch).
+    then CCV (Merkleize), then OP_VAULT (opvault branch), then CAT+CSFS (Inquisition).
     --covenant both is a legacy alias that runs CTV + CCV only.
     """
     # Determine which experiments to run

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# run_full.sh — Run all experiments on all three vaults, then analyze.
+# run_full.sh — Run all experiments on all four vaults, then analyze.
 #
 # Usage:  ./run_full.sh
 #
 # What it does:
-#   1. Runs all 12 experiments on CTV, CCV, and OP_VAULT (auto-switches nodes)
+#   1. Runs all 16 experiments on CTV, CCV, OP_VAULT, and CAT+CSFS (auto-switches nodes)
 #   2. Generates comparison JSONs for each experiment
 #   3. Produces a consolidated full_analysis.md report
 
@@ -24,7 +24,7 @@ mkdir -p "$RESULTS_DIR"
 BEFORE_DIRS=$(ls -1 "$RESULTS_DIR" 2>/dev/null | sort)
 
 # ── Step 1: Run all experiments on all covenants ───────────────────
-echo "── Step 1/3: Running all experiments on CTV, CCV, OP_VAULT ───"
+echo "── Step 1/3: Running all experiments on CTV, CCV, OP_VAULT, CAT+CSFS ──"
 echo ""
 uv run run.py run --all --covenant all
 echo ""

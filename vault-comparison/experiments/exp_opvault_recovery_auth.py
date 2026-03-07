@@ -70,6 +70,7 @@ CCV_RECOVER_VSIZE = 122
     name="opvault_recovery_auth",
     description="OP_VAULT authorized recovery: defense property and compromise analysis",
     tags=["core", "opvault_specific", "security", "quantitative"],
+    required_covenants=["opvault"],
 )
 def run(adapter: VaultAdapter) -> ExperimentResult:
     result = ExperimentResult(
