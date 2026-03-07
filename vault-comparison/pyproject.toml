@@ -37,6 +37,12 @@ all = [
     "rich",
 ]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: requires a running Bitcoin node (deselect with '-m not integration')",
+]
+
 [tool.setuptools.packages.find]
 include = ["harness*", "adapters*", "experiments*"]
 
