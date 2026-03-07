@@ -1,0 +1,16 @@
+# Vault Comparison Framework Configuration
+# Override defaults here. Environment variables take precedence.
+
+[paths]
+results_dir = "results"
+
+[defaults]
+default_block_delay = 10
+default_vault_amount = 100_000
+default_fee_rate = 5
+
+[rpc]
+host = "127.0.0.1"
+port = 18443
+user = "rpcuser"
+password = "rpcpassword"
