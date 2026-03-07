@@ -29,6 +29,15 @@ All four vault designs have single-point-of-failure cold/recovery keys:
     No destination constraint — cold key holder signs SIGHASH_DEFAULT
     which commits to the actual output, not an embedded one.
 
+Poelstra's "CAT and Schnorr Tricks II" (https://blog.blockstream.com/
+cat-and-schnorr-tricks-ii/) proposes an alternative CAT-only vault where
+the cold key does NOT grant unconstrained sweeps.  Instead, the cold key
+triggers a RECURSIVE RESET: funds return to the staging covenant with a
+new target and a reset timelock.  Cold key compromise under that model
+leads to an indefinite liveness battle (attacker resets, owner re-triggers,
+attacker resets again) rather than immediate theft.  Phase 5 of this
+experiment models the cost of that alternative design.
+
 === THREAT MODEL: Cold key compromise ===
 Attacker: Has the cold key.  Goal: steal all vault funds immediately.
 Severity: CRITICAL for all vault designs.
@@ -54,6 +63,9 @@ Phase 3: Recovery timing analysis — measure the cold key's power:
   can recover from vault state (before trigger) and vault-loop state
   (after trigger).  No timelock on either.
 Phase 4: Cross-vault recovery security comparison.
+Phase 5: Poelstra-style reset-loop cost model — counterfactual analysis
+  of what the recovery economics would look like under a recursive
+  staging design (cold key resets instead of sweeping).
 """
 
 import sys
@@ -391,4 +403,145 @@ def _run_cold_key_recovery(adapter, result):
         "risk of logic bugs.  But it offers NO protocol-level protection "
         "against cold key compromise.  The tradeoff: implementation "
         "simplicity vs recovery security depth."
+    )
+
+    # ── Phase 5: Poelstra-style reset-loop cost model ──────────────────
+    result.observe("")
+    result.observe("=" * 60)
+    result.observe("PHASE 5: Poelstra-style recursive reset — counterfactual analysis")
+    result.observe("=" * 60)
+    result.observe(
+        "Poelstra's 'CAT and Schnorr Tricks II' proposes an alternative "
+        "recovery model for CAT-based vaults where the cold key does NOT "
+        "grant an unconstrained sweep.  Instead, the cold key triggers a "
+        "RECURSIVE RESET: funds return to the SAME staging covenant with "
+        "a new target destination and a reset timelock."
+    )
+    result.observe(
+        "Under that design, cold key compromise leads to a LIVENESS BATTLE, "
+        "not immediate theft:"
+    )
+    result.observe(
+        "  Round N: Owner triggers withdrawal → Attacker (cold key) resets "
+        "staging → funds return to covenant with reset timelock → repeat."
+    )
+    result.observe(
+        "The attacker CANNOT steal funds because the reset sends coins back "
+        "to the same staging script (recursive covenant).  The attacker can "
+        "only delay the owner indefinitely."
+    )
+
+    # Cost model using measured vsizes from this experiment
+    #
+    # Our vault's measured vsizes:
+    #   trigger_vsize: ~200 vB (from lifecycle experiments)
+    #   recover_vsize: measured above in Phase 1
+    #
+    # Poelstra's reset would use a CAT+CSFS introspection script similar
+    # to the trigger leaf (not the bare OP_CHECKSIG we have), so we
+    # estimate the reset vsize as comparable to the trigger vsize.
+    # This is a LOWER BOUND — Poelstra's design is CAT-only (no CSFS),
+    # which may be slightly larger due to the G-as-pubkey Schnorr trick.
+
+    estimated_trigger_vsize = 200  # approximate from lifecycle measurements
+    # Poelstra reset ≈ CAT+CSFS trigger (introspection + cold key sig)
+    estimated_reset_vsize = estimated_trigger_vsize + 15  # slightly larger: cold key path
+    our_recover_vsize = recover_vsize  # measured in Phase 1
+
+    result.observe("")
+    result.observe("COST MODEL COMPARISON: Our design vs Poelstra-style reset")
+    result.observe(f"  Our recover vsize (bare OP_CHECKSIG): {our_recover_vsize} vB")
+    result.observe(f"  Our trigger vsize (CAT+CSFS introspection): ~{estimated_trigger_vsize} vB")
+    result.observe(f"  Poelstra reset vsize (estimated, CAT introspection + cold key): ~{estimated_reset_vsize} vB")
+    result.observe("")
+
+    # Model N rounds of the liveness battle
+    max_battle_rounds = 10
+    result.observe(f"LIVENESS BATTLE: {max_battle_rounds}-round cost projection")
+    result.observe(f"  Each round: owner pays trigger (~{estimated_trigger_vsize} vB) + "
+                   f"attacker pays reset (~{estimated_reset_vsize} vB)")
+    result.observe("")
+
+    for fee_rate in [1, 10, 50, 100]:
+        result.observe(f"  At {fee_rate} sat/vB:")
+        owner_per_round = estimated_trigger_vsize * fee_rate
+        attacker_per_round = estimated_reset_vsize * fee_rate
+        for n in [1, 5, max_battle_rounds]:
+            owner_total = owner_per_round * n
+            attacker_total = attacker_per_round * n
+            combined = owner_total + attacker_total
+            vault_pct = combined / VAULT_AMOUNT * 100
+            result.observe(
+                f"    {n:>2} rounds: owner={owner_total:>8,} sats, "
+                f"attacker={attacker_total:>8,} sats, "
+                f"combined={combined:>8,} sats ({vault_pct:.3f}% of vault)"
+            )
+        result.observe("")
+
+    result.observe("BATTLE TERMINATION CONDITIONS:")
+    result.observe(
+        "  1. Fee exhaustion: combined fees drain the vault value.  At 10 sat/vB, "
+        f"a {VAULT_AMOUNT:,}-sat vault survives ~{VAULT_AMOUNT // ((estimated_trigger_vsize + estimated_reset_vsize) * 10):,} rounds."
+    )
+    result.observe(
+        "  2. Attacker abandonment: attacker gives up (no financial gain, "
+        "only denial of service).  Same rationality constraint as CCV griefing."
+    )
+    result.observe(
+        "  3. Owner key rotation: owner sets up a new vault with a fresh "
+        "cold key.  Requires out-of-band coordination (new key generation, "
+        "new vault creation) while the battle continues on the old vault."
+    )
+
+    result.observe("")
+    result.observe("COMPARISON: Our design vs Poelstra-style recovery")
+    result.observe(
+        "  Our design (bare OP_CHECKSIG):"
+    )
+    result.observe(
+        "    Cold key compromise consequence: IMMEDIATE TOTAL THEFT"
+    )
+    result.observe(
+        "    Recovery vsize: {v} vB (lightweight)".format(v=our_recover_vsize)
+    )
+    result.observe(
+        "    Advantage: Simplest possible script, smallest witness"
+    )
+    result.observe(
+        "    Disadvantage: No protocol-level defense against cold key theft"
+    )
+    result.observe(
+        "  Poelstra-style recursive reset:"
+    )
+    result.observe(
+        "    Cold key compromise consequence: LIVENESS DENIAL ONLY (no theft)"
+    )
+    result.observe(
+        "    Reset vsize: ~{v} vB (heavier — requires introspection)".format(v=estimated_reset_vsize)
+    )
+    result.observe(
+        "    Advantage: Cold key compromise is survivable — funds are never lost, "
+        "only delayed.  Matches CCV/OP_VAULT security properties."
+    )
+    result.observe(
+        "    Disadvantage: Requires recursive covenant (coins return to same "
+        "script), larger witness, and the liveness battle has real fee costs"
+    )
+    result.observe(
+        "    Implementation note: Poelstra's design achieves this with CAT alone "
+        "(no CSFS) using a Schnorr discrete-log trick (G as pubkey), but the "
+        "same could be built more cleanly with CAT+CSFS using the dual-verification "
+        "pattern already used in our trigger/withdraw leaves."
+    )
+    result.observe("")
+    result.observe(
+        "VERDICT: The Poelstra-style reset would upgrade CAT+CSFS recovery "
+        "from rank #4 (immediate theft) to rank #2 (liveness denial, matching "
+        "OP_VAULT).  The cost is a ~{d} vB increase per recovery and the "
+        "requirement for recursive covenants.  Whether this tradeoff is worth "
+        "it depends on the custody threat model: for high-value vaults where "
+        "cold key compromise is a realistic threat, the Poelstra model is "
+        "strictly superior.  For simpler setups where the cold key is in a "
+        "hardware wallet or Shamir-split, the bare OP_CHECKSIG may be "
+        "adequate.".format(d=estimated_reset_vsize - our_recover_vsize)
     )

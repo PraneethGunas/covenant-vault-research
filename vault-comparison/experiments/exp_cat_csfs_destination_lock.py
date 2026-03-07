@@ -396,3 +396,21 @@ def _run_destination_lock(adapter, result):
         "destination from the witness — but then the hot key could choose "
         "any destination, defeating the covenant's purpose."
     )
+    result.observe("")
+    result.observe("  ALTERNATIVE DESIGN (Poelstra, 'CAT and Schnorr Tricks II'):")
+    result.observe(
+        "  Poelstra's CAT-only vault uses a different technique: the trigger "
+        "transaction includes a SECOND OUTPUT whose scriptPubKey encodes the "
+        "withdrawal destination.  The staging covenant then verifies at "
+        "withdrawal time that sha_outputs begins with the correct amount "
+        "followed by this destination scriptPubKey (copied from the funding "
+        "transaction).  This gives the hot key DYNAMIC destination choice at "
+        "trigger time — similar to CCV/OP_VAULT — while still using CAT-based "
+        "introspection.  The tradeoff: the hot key holder can redirect funds "
+        "to an attacker-chosen staging destination (a larger attack surface "
+        "than our fixed-destination design), and the script must verify a "
+        "two-output structure using SIGHASH_ANYONECANPAY|ALL (0x81) rather "
+        "than SIGHASH_SINGLE|ANYONECANPAY (0x83).  Our vault's inflexible "
+        "destination is the more conservative choice; Poelstra's is the more "
+        "operationally flexible one."
+    )

@@ -50,6 +50,20 @@ BIP text: https://bips.dev/119/
 
 Defines the CTV opcode. The BIP-119 discussion covers address reuse risks, fee management limitations, and the single-output commitment model.
 
+### [Poe21] Poelstra — "CAT and Schnorr Tricks"
+Andrew Poelstra. "CAT and Schnorr Tricks I" and "CAT and Schnorr Tricks II." Blockstream Research Blog, October–November 2021.
+Part I: https://blog.blockstream.com/cat-and-schnorr-tricks-i/
+Part II: https://blog.blockstream.com/cat-and-schnorr-tricks-ii/
+Also: https://www.wpsoftware.net/andrew/blog/cat-and-schnorr-tricks-ii.html
+
+Demonstrates that OP_CAT alone (without OP_CHECKSIGFROMSTACK) can achieve transaction introspection via a Schnorr discrete-log trick: forcing both the public key and nonce to equal the generator G collapses the signature equation into a deterministic hash of the message, effectively emulating CSFS. Part II constructs a two-phase vault (vault → staging) with recursive covenants, dynamic destination selection via a second output, and a cold-key reset model where compromise leads to a liveness battle rather than theft. Our CAT+CSFS vault uses a simplified variant: real CSFS instead of the G-trick, fixed destinations instead of dynamic, and unconstrained cold-key recovery instead of recursive staging resets. The cold key recovery experiment (Phase 5) models the cost tradeoff between these designs.
+
+### [RP24] Ruffing, Poelstra — BIP-348 (OP_CHECKSIGFROMSTACK)
+Tim Ruffing, Andrew Poelstra. "BIP-348: OP_CHECKSIGFROMSTACK." Bitcoin Improvement Proposal, 2024.
+BIP text: https://bips.dev/348/
+
+Formalizes OP_CHECKSIGFROMSTACK for Tapscript, enabling verification of Schnorr signatures against arbitrary messages on the stack. Combined with OP_CAT (BIP-347), enables the dual-verification pattern used in our CAT+CSFS vault: the same signature is checked by CSFS (against a stack-assembled sighash preimage) and CHECKSIG (against the real transaction sighash), proving that the witness-provided preimage data matches the actual transaction.
+
 ### Additional references
 
 **Bitcoin Optech Newsletter.** Multiple editions covering CPFP carve-out, package relay, v3/TRUC transactions, and OP_VAULT analysis. Cite specific editions for fee pinning context.
@@ -111,11 +125,27 @@ The authorized recovery mechanism is specified in [BIP-345](https://bips.dev/345
 
 Trigger key compromise is the standard adversary model for vault security, analyzed in [SHMB20] and [OS23]. OP_VAULT-specific aspects: the xpub-derived trigger key hierarchy ([BIP-345](https://bips.dev/345/) §Key management), CTV-locked trigger output (shared with CTV), and three-key separation (trigger, recoveryauth, recovery). The dual-key compromise analysis (trigger + recoveryauth = persistent liveness denial, NOT theft) follows from the pre-committed recovery address design in BIP-345 — recovery always sends to the address fixed at vault creation. This is structurally less severe than CTV's hot+fee dual-key compromise (which enables actual fund theft via fee-pinning bypass).
 
+### N. cat_csfs_hot_key_theft
+
+Hot key compromise in the CAT+CSFS vault is structurally similar to CTV's: the hot key can trigger unvaults and complete withdrawals, but only to the pre-committed destination (embedded as sha_single_output in the script). The dual-verification pattern (CSFS + CHECKSIG) was proposed by Poelstra [Poe21] and formalized by Ruffing/Poelstra [RP24]. The sighash preimage splitting technique used in the experiment follows from BIP-342 (Tapscript) sighash structure.
+
+### O. cat_csfs_witness_manipulation
+
+Tests witness-level attacks against the CAT+CSFS introspection mechanism: prefix/suffix tampering, sha_single_output substitution, and signature reuse across different transaction contexts. The dual-verification constraint (CSFS against stack-assembled preimage + CHECKSIG against real sighash) is the core defense. Prior art: Poelstra [Poe21] describes the general introspection-via-signature-verification technique; this experiment stress-tests its robustness.
+
+### P. cat_csfs_destination_lock
+
+The fixed-destination property of our CAT+CSFS vault (sha_single_output embedded at creation time) contrasts with Poelstra's [Poe21] dynamic destination design (destination encoded in a second output at trigger time) and with CCV/OP_VAULT (destination chosen at trigger time). Phase 4 includes a design comparison noting Poelstra's alternative and the security tradeoff: fixed destination = smaller hot-key attack surface; dynamic destination = operational flexibility at the cost of hot-key redirection risk.
+
+### Q. cat_csfs_cold_key_recovery
+
+The unconstrained cold-key recovery (bare OP_CHECKSIG) is the simplest possible recovery mechanism but also the weakest. Phase 5 models the alternative design from Poelstra [Poe21]: recursive staging resets where cold key compromise leads to a liveness battle rather than immediate theft. Cost projections compare per-round battle expenses (owner trigger + attacker reset) across fee environments. The Poelstra reset model would upgrade CAT+CSFS recovery security from rank #4 (immediate theft) to rank #2 (liveness denial, matching OP_VAULT).
+
 ---
 
 ## 3. Contribution Summary
 
-This work provides an empirical comparison framework for CTV ([BIP-119](https://bips.dev/119/)), CCV ([BIP-443](https://bips.dev/443/)), and OP_VAULT ([BIP-345](https://bips.dev/345/)) vault designs. The threat models and attack vectors tested here originate from the works cited above — the conceptual contribution is measurement and cross-design synthesis, not vulnerability discovery. See `DESIGN.md` §1.1 for the full novelty statement.
+This work provides an empirical comparison framework for CTV ([BIP-119](https://bips.dev/119/)), CCV ([BIP-443](https://bips.dev/443/)), OP_VAULT ([BIP-345](https://bips.dev/345/)), and CAT+CSFS ([BIP-347](https://bips.dev/347/) + [BIP-348](https://bips.dev/348/)) vault designs. The threat models and attack vectors tested here originate from the works cited above — the conceptual contribution is measurement and cross-design synthesis, not vulnerability discovery. See `DESIGN.md` §1.1 for the full novelty statement.
 
 **What prior work established (we quantify, not discover):**
 
@@ -124,10 +154,12 @@ This work provides an empirical comparison framework for CTV ([BIP-119](https://
 - Fee pinning via descendant chains, TRUC/v3 mitigation: Zhao, Bitcoin Core PRs #28948/#29496
 - Authorized recovery tradeoff, watchtower fee exhaustion estimates: O'Beirne/Sanders [OS23], Harding [Har24]
 - CCV mode confusion with undefined OP_SUCCESS flags: Ingala [Ing23]
+- CAT-based transaction introspection via dual signature verification: Poelstra [Poe21]
+- Recursive staging reset as cold key compromise mitigation: Poelstra [Poe21]
 
 **What the framework contributes:**
 
-1. The first three-way empirical comparison — regtest-measured transaction sizes for CTV, CCV, and OP_VAULT (12 experiments, 8 structured threat models, TM1–TM8) under a uniform adapter interface. OP_VAULT measurements revealed the fee-input overhead (all non-deposit txs +80–90 vB vs estimates), correcting prior hand-estimates.
+1. The first four-way empirical comparison — regtest-measured transaction sizes for CTV, CCV, OP_VAULT, and CAT+CSFS (16 experiments, structured threat models) under a uniform adapter interface. OP_VAULT measurements revealed the fee-input overhead (all non-deposit txs +80–90 vB vs estimates), correcting prior hand-estimates.
 
 2. Fee-dependent inversion of security rankings — the cross-experiment fee sensitivity synthesis (experiment J) shows that the relative security ordering of vault designs flips depending on fee environment. In low-fee regimes, CCV/OP_VAULT are safer (splitting is infeasible); in high-fee regimes, watchtower exhaustion becomes feasible while CTV's fee pinning cost remains negligible. No prior analysis has demonstrated this crossover.
 
