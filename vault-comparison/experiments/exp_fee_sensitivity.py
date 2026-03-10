@@ -81,7 +81,7 @@ from experiments.registry import register
 CTV_TOVAULT_VSIZE = 122       # bare CTV funding tx (1-in/1-out)
 CTV_UNVAULT_VSIZE = 94        # CTV-committed unvault (minimal witness)
 CTV_WITHDRAW_VSIZE = 152      # P2WSH hot withdrawal after CSV (2 outputs: hot + anchor)
-CTV_TOCOLD_VSIZE = 180        # Cold sweep (recovery path) — STRUCTURAL UPPER BOUND.
+CTV_TOCOLD_VSIZE = 180        # Cold sweep (recovery path) — ⚠ ESTIMATED, NOT MEASURED.
                               # Derivation: tocold_tx and tohot_tx share identical non-witness data
                               # (1 P2WSH input, 2 outputs: P2WPKH destination + 550-sat anchor).
                               # They differ only in witness: tohot = [~72B ECDSA sig, 1B OP_TRUE,
@@ -179,7 +179,7 @@ WT_BATCHED_RECOVERY_PER_INPUT = 67            # CCV per-input cost in batched re
 #     Slightly smaller than trigger because the vault-loop taptree differs.
 #   - recover (125 vB) VERIFIED: simple cold_pk OP_CHECKSIG (no introspection).
 #     Very lightweight — comparable to CCV's keyless recovery (122 vB).
-CATCSFS_TOVAULT_VSIZE = 153      # P2WPKH → P2TR — ESTIMATED from script structure (1-in/1-out).
+CATCSFS_TOVAULT_VSIZE = 153      # P2WPKH → P2TR — ⚠ ESTIMATED, NOT MEASURED (1-in/1-out).
                                  # Structural basis: P2WPKH input (73B sig + 33B pubkey witness),
                                  # P2TR output (34B), overhead (10B).  Comparable to CCV_TOVAULT
                                  # (165 vB, 2 outputs) minus ~12 vB for single output.
@@ -236,6 +236,17 @@ def run(adapter=None) -> ExperimentResult:
             "fee_environments": [(r, l) for r, l in FEE_ENVIRONMENTS],
             "note": "Analytical experiment — no on-chain transactions",
         },
+    )
+
+    # ── Estimated constant disclosure ─────────────────────────────────
+    result.observe(
+        "ESTIMATED CONSTANTS: 2 of 16 vsize constants are structural estimates, "
+        "not regtest measurements: CTV_TOCOLD_VSIZE (180 vB, conservative upper "
+        "bound, structural estimate ~134 vB) and CATCSFS_TOVAULT_VSIZE (153 vB, "
+        "estimated from P2WPKH→P2TR script structure).  Both have ±33% robustness "
+        "bounds that do not change any qualitative conclusion (Section 6).  "
+        "The remaining 14 constants are VERIFIED against regtest measurements.  "
+        "See results/reference/CHECKSUMS.md for canonical result checksums."
     )
 
     # ── Section 1: Lifecycle cost comparison ──────────────────────────
