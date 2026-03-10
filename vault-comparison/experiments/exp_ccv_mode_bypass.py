@@ -5,7 +5,7 @@ production-shaped vault.  Constructs a Vault with the SAME taptree as the
 real pymatt Vault (trigger + recover leaves), but the recover leaf uses
 an attacker-supplied CCV mode value instead of the correct 0.
 
-When the mode is undefined (outside [-1, 0, 1, 2]), the interpreter treats
+When the mode is undefined (value >= 4, i.e. bits beyond 0-1 set), the interpreter treats
 the entire script as OP_SUCCESS — unconditional acceptance, zero covenant
 checks.  The attacker can spend the vault UTXO to arbitrary outputs with
 no signature, no amount validation, nothing.
@@ -18,7 +18,7 @@ Phase 1 (Control): Construct a correct Vault (mode=0 on recover).
   Attempt a mutated recover spend redirecting funds to attacker address.
   Expected: REJECTED — covenant enforces output script.
 
-Phase 2 (Bypass sweep): For each undefined mode in {3, 4, 7, 128, 255}:
+Phase 2 (Bypass sweep): For each undefined mode in {4, 7, 128, 255}:
   Construct a VulnerableVault identical to the real Vault but with the
   test mode on the recover leaf.  Fund it.  Attempt the same mutated spend.
   Expected: ACCEPTED — OP_SUCCESS bypasses all checks.
@@ -33,6 +33,7 @@ against a full vault taptree structure.
 """
 
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from adapters.base import VaultAdapter
@@ -47,8 +48,29 @@ FEE_SATS = 1_000
 SPEND_DELAY = 10
 
 # Mode values to sweep.  0 is the control (valid), rest are undefined.
+# BIP-443 defines CCV flags as a bitmask with two defined bits:
+#   bit 0 (value 1): CCV_FLAG_CHECK_INPUT
+#   bit 1 (value 2): CCV_FLAG_DEDUCT_OUTPUT_AMOUNT
+# Valid flag values are all combinations of these two bits:
+#    0 = default (check output, preserve amount)
+#    1 = CCV_FLAG_CHECK_INPUT
+#    2 = CCV_FLAG_DEDUCT_OUTPUT_AMOUNT
+#    3 = CHECK_INPUT | DEDUCT_OUTPUT_AMOUNT (both flags composed)
+# The sentinel value -1 means "skip CCV check entirely" (NOP).
+# Any flag value with bits outside {0,1} set (i.e., value >= 4) is
+# undefined and triggers OP_SUCCESS semantics for forward compatibility.
+#
+# MODE 3 VERIFICATION: Mode 3 (0b11) is the bitwise OR of the two defined
+# flags (CHECK_INPUT=1 and DEDUCT_OUTPUT_AMOUNT=2).  It is a VALID mode
+# because only bits 0 and 1 are set — both are defined bits.  Mode 3 does
+# NOT trigger OP_SUCCESS.  This is confirmed by the BIP-443 specification:
+# "if the flags has any bit set that's not defined [... OP_SUCCESS]."  Since
+# bits 0 and 1 are both defined, mode 3 has no undefined bits and is valid.
+# We test mode 3 separately below as a VALID_COMPOSED_MODE to verify it
+# does NOT trigger bypass (confirming the bitmask boundary is at value 4).
 CONTROL_MODE = 0
-BYPASS_MODES = [3, 4, 7, 128, 255]
+VALID_COMPOSED_MODE = 3  # CHECK_INPUT | DEDUCT_OUTPUT_AMOUNT — should behave as valid
+BYPASS_MODES = [4, 7, 128, 255]
 
 
 @register(
@@ -66,6 +88,7 @@ def run(adapter: VaultAdapter) -> ExperimentResult:
             "fee_sats": FEE_SATS,
             "spend_delay": SPEND_DELAY,
             "control_mode": CONTROL_MODE,
+            "valid_composed_mode": VALID_COMPOSED_MODE,
             "bypass_modes": BYPASS_MODES,
         },
     )
@@ -318,6 +341,37 @@ def _run_bypass_experiment(adapter, result, mods):
     else:
         result.observe("PASS: Control vault correctly rejected mutated spend.")
 
+    # ── Phase 1b: Mode 3 verification (valid composed mode) ───────
+    result.observe("")
+    result.observe("=" * 60)
+    result.observe("PHASE 1b: Mode 3 — valid composed mode (CHECK_INPUT | DEDUCT)")
+    result.observe("=" * 60)
+    result.observe(
+        "Mode 3 (0b11) sets bits 0 and 1, both of which are defined in BIP-443.  "
+        "This should NOT trigger OP_SUCCESS — it is a valid composed flag."
+    )
+
+    mode3_accepted = _test_single_mode(
+        mods, manager, rpc, result,
+        mode=VALID_COMPOSED_MODE,
+        recover_pk=recover_pk,
+        unvault_pk=unvault_pk,
+        label="mode3_valid",
+    )
+
+    if mode3_accepted:
+        result.observe(
+            "WARNING: Mode 3 accepted mutated spend!  This would mean mode 3 "
+            "triggers OP_SUCCESS despite having only defined bits set.  "
+            "Investigate: the BIP-443 bitmask boundary may differ from spec."
+        )
+    else:
+        result.observe(
+            "PASS: Mode 3 correctly rejected mutated spend.  Confirms the "
+            "OP_SUCCESS boundary is at value >= 4 (any undefined bit set), "
+            "not value >= 3.  The bitmask interpretation is verified."
+        )
+
     # ── Phase 2: Bypass sweep ───────────────────────────────────
     result.observe("")
     result.observe("=" * 60)
@@ -347,15 +401,28 @@ def _run_bypass_experiment(adapter, result, mods):
     result.observe("PHASE 3: Summary")
     result.observe("=" * 60)
     result.observe(f"Control (mode=0): {'ACCEPTED' if control_accepted else 'REJECTED'}")
-    result.observe(f"Bypass modes: {bypass_accepted} accepted, {bypass_rejected} rejected "
+    result.observe(f"Mode 3 (valid composed): {'ACCEPTED' if mode3_accepted else 'REJECTED'}")
+    result.observe(f"Bypass modes (≥4): {bypass_accepted} accepted, {bypass_rejected} rejected "
                    f"(out of {len(BYPASS_MODES)} tested)")
 
-    if bypass_accepted == len(BYPASS_MODES) and not control_accepted:
+    if bypass_accepted == len(BYPASS_MODES) and not control_accepted and not mode3_accepted:
         result.observe(
             "CONFIRMED: All undefined modes trigger OP_SUCCESS on a "
             "production-shaped vault taptree. A single-byte encoding "
             "bug in the recover clause mode value causes COMPLETE "
             "covenant bypass — anyone can steal the vault balance."
+        )
+        result.observe(
+            "METHODOLOGY NOTE: We use a structurally equivalent taptree "
+            "(VulnerableVault) rather than the production pymatt Vault class "
+            "because the production class does not expose undefined mode "
+            "values — the vulnerability requires a developer to choose a "
+            "mode byte outside {0,1,2,3}.  The VulnerableVault mirrors the "
+            "production Vault's taptree layout ([trigger, recover]) with "
+            "identical script structure; only the recover leaf's mode byte "
+            "differs.  The OP_SUCCESS semantics are a property of the CCV "
+            "interpreter, not the contract class, so the finding transfers "
+            "to any contract using an undefined mode value."
         )
         result.observe(
             "CCVWildSpend transition: vault UTXO → zero typed outputs → "
@@ -442,7 +509,3 @@ def _test_single_mode(mods, manager, rpc, result, *, mode, recover_pk,
         err_msg = str(rpc_err)
         result.observe(f"  REJECTED: {err_msg[:120]}")
         return False
-
-
-# Need dataclass import for _Unvaulting.State
-from dataclasses import dataclass
