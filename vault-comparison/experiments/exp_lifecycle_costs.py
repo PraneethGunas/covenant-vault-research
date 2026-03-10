@@ -18,7 +18,7 @@ Metrics collected:
 from adapters.base import VaultAdapter
 from harness.metrics import ExperimentResult, TxMetrics
 from harness.rpc import RegTestRPC
-from harness.regtest_caveats import emit_vsize_is_primary
+from harness.regtest_caveats import emit_vsize_is_primary, emit_regtest_caveats
 from experiments.registry import register
 
 
@@ -63,11 +63,41 @@ def run(adapter: VaultAdapter) -> ExperimentResult:
         result.observe(f"Total lifecycle vsize: {result.total_vsize()} vbytes")
         result.observe(f"Total lifecycle fees: {result.total_fees()} sats")
 
+        # Attribution: lifecycle model and threat vocabulary
+        result.observe(
+            "PRIOR ART: The deposit→unvault→withdraw lifecycle model follows "
+            "Swambo et al. [SHMB20] ('Custody Protocols Using Bitcoin Vaults', "
+            "arXiv:2005.11776), who formalized vault state transitions and the "
+            "watchtower monitoring assumption.  Our contribution is empirical "
+            "measurement of transaction sizes across four covenant designs under "
+            "a uniform adapter interface — prior analyses used hand-estimated vsizes."
+        )
+
     except Exception as e:
         result.error = str(e)
         result.observe(f"FAILED: {e}")
 
-    emit_vsize_is_primary(result)
+    emit_regtest_caveats(
+        result,
+        experiment_specific=(
+            "Lifecycle vsize measurements are fully valid on regtest — the "
+            "script structure and witness sizes are identical to mainnet.  "
+            "Fee amounts are regtest artifacts; multiply vsize by prevailing "
+            "mainnet fee rate for real-world cost estimates.  "
+            "DETERMINISM NOTE: vsize is structurally deterministic for a given "
+            "script template and input count.  The same covenant design with "
+            "the same key configuration produces identical vsize regardless "
+            "of vault amount, block height, or fee environment.  This is "
+            "because vsize depends only on: (1) the scriptPubKey structure "
+            "(fixed per covenant design), (2) the witness program (fixed per "
+            "key configuration), and (3) the number of inputs/outputs (fixed "
+            "per vault operation).  We verified this independence in "
+            "watchtower_exhaustion (trigger/recover vsize stable across 50 "
+            "splits with balance ranging from 50M to <1K sats, range=0 vB) "
+            "and in lifecycle_costs (single-run is sufficient because the "
+            "measurement is deterministic, not statistical)."
+        ),
+    )
     return result
 
 

@@ -42,7 +42,7 @@ vault-aware wallet software enforces address hygiene.
 
 from adapters.base import VaultAdapter
 from harness.metrics import ExperimentResult
-from harness.regtest_caveats import emit_vsize_is_primary
+from harness.regtest_caveats import emit_vsize_is_primary, emit_regtest_caveats
 from experiments.registry import register
 
 
@@ -446,6 +446,41 @@ def _test_cat_csfs_address_reuse(adapter, result):
         "without building a new plan — the existing trigger/withdraw signatures "
         "commit to the original amount via CSFS sighash verification."
     )
+    result.observe(
+        "TEST LIMITATION: This test demonstrates that the adapter handles two "
+        "independent vaults correctly, but does NOT empirically demonstrate "
+        "the raw-deposit failure mode (sending funds directly to vault1's "
+        "scriptPubKey without creating a new VaultPlan, then attempting to "
+        "trigger with vault1's existing plan).  The failure mechanism is "
+        "structurally different from CTV's:"
+    )
+    result.observe(
+        "  CTV failure:      Hash is in the scriptPubKey → any deposit to "
+        "the same script is trivially stuck (we demonstrate this above)."
+    )
+    result.observe(
+        "  CAT+CSFS failure: Commitment is in the SIGNATURE at spend time "
+        "via CSFS.  The trigger leaf verifies a sighash preimage (assembled "
+        "via OP_CAT) that commits to output amounts derived from the "
+        "original deposit.  A mismatched deposit amount → CHECKSIG fails "
+        "because the preimage doesn't match the actual transaction sighash."
+    )
+    result.observe(
+        "  WHY NOT DEMONSTRATED: Empirically showing this requires "
+        "reconstructing the full CSFS signing flow with a manually-crafted "
+        "raw deposit (bypassing VaultPlan), then attempting to trigger "
+        "with vault1's existing hot-key signature.  The adapter's create_vault() "
+        "always builds a fresh VaultPlan, so the failure cannot occur through "
+        "the adapter interface.  A future extension could add a raw-deposit "
+        "helper to the CAT+CSFS adapter to demonstrate this directly."
+    )
+    result.observe(
+        "  KEY NUANCE: Unlike CTV (permanently stuck, no rescue path), "
+        "CAT+CSFS mismatched deposits are rescuable if the hot key signer "
+        "cooperates — they can compute a new VaultPlan for the actual "
+        "amount and sign a fresh trigger.  The cold key can also sweep "
+        "via the recover leaf (bare OP_CHECKSIG, amount-agnostic)."
+    )
 
     result.observe(
         "DESIGN COMPARISON:"
@@ -493,6 +528,10 @@ def run(adapter: VaultAdapter) -> ExperimentResult:
         },
     )
 
+    # NOTE: Name-based dispatch is used here because each test probes
+    # adapter-specific internals (CTV's bare script reuse, CCV's contract
+    # instances, OP_VAULT's ChainMonitor, CAT+CSFS's CSFS binding).
+    # There is no single capability flag that captures address-reuse behavior.
     try:
         if adapter.name == "ctv":
             _test_ctv_address_reuse(adapter, result)
@@ -511,5 +550,15 @@ def run(adapter: VaultAdapter) -> ExperimentResult:
     except Exception as e:
         result.error = str(e)
 
-    emit_vsize_is_primary(result)
+    emit_regtest_caveats(
+        result,
+        experiment_specific=(
+            "Address reuse behavior is a consensus/script property — the CTV "
+            "hash commitment and CCV's per-UTXO contract model are identical on "
+            "regtest and mainnet.  The stuck-UTXO finding for CTV is fully valid.  "
+            "Prior art: Address reuse risk in CTV is discussed in the BIP-119 "
+            "mailing list and O'Beirne's BIP-345 analysis [OS23].  CCV's resilience "
+            "follows from Ingala's [Ing23] per-UTXO contract instance design."
+        ),
+    )
     return result

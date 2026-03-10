@@ -68,6 +68,7 @@ from experiments.registry import register
     name="ccv_edge_cases",
     description="CCV-specific edge cases: mode confusion, keypath bypass, sentinel values",
     tags=["ccv_only", "developer_footguns", "security"],
+    required_covenants=["ccv"],
 )
 def run(adapter: VaultAdapter) -> ExperimentResult:
     result = ExperimentResult(

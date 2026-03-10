@@ -78,7 +78,10 @@ def run(adapter: VaultAdapter) -> ExperimentResult:
         # Phase 1: Inspect output structure
         _phase1_inspect_outputs(adapter, result, rpc)
 
-        # Phase 2: Demonstrate the pinning attack (CTV) or compare fee models
+        # Phase 2: Demonstrate the pinning attack (CTV) or compare fee models.
+        # Name-based dispatch is required because the pinning attack uses CTV
+        # adapter internals (fee key, tocold broadcast, anchor outputs).  Non-CTV
+        # covenants lack anchor outputs entirely, so the attack has no analog.
         if adapter.name == "ctv":
             _phase2_pinning_attack(adapter, result, rpc)
         else:
@@ -501,6 +504,29 @@ def _phase2_pinning_attack(adapter, result, rpc):
         "not just theoretically described.  The attack costs < 0.05% of the "
         "vault balance at any fee rate.  Combined with hot key compromise "
         "this enables irrecoverable fund theft."
+    )
+    result.observe(
+        "FORWARD-LOOKING NOTE: Bitcoin Core's cluster mempool redesign "
+        "(Wuille, Daftuar, 2024-2025) may change the descendant chain "
+        "limits exploited by this attack.  Cluster mempool replaces the "
+        "per-transaction ancestor/descendant limits with cluster-based "
+        "evaluation, potentially altering the pinning calculus.  "
+        "Additionally, TRUC/v3 transactions (Zhao, Bitcoin Core #28948) "
+        "would limit unconfirmed descendants to 1, eliminating the "
+        "25-descendant chain attack entirely.  If CTV vault transactions "
+        "were marked as TRUC, this pinning vector would be closed.  "
+        "However, CTV's hash commitment at creation time means existing "
+        "vaults cannot retroactively adopt TRUC semantics — the "
+        "vulnerability persists for any pre-TRUC CTV vault."
+    )
+    result.observe(
+        "Antoine Riard's replacement cycling attack [Ria23] demonstrates "
+        "a related pinning technique in the Lightning Network context.  "
+        "While the specific mechanics differ (replacement cycling targets "
+        "HTLC timeouts, not CTV anchors), the underlying insight is shared: "
+        "an attacker can manipulate mempool policy to prevent time-sensitive "
+        "transactions from confirming.  Our descendant-chain attack is a "
+        "simpler instantiation of the same class of mempool-policy exploits."
     )
 
 

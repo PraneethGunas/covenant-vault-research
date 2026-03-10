@@ -4,6 +4,18 @@ Tests partial-withdrawal (revault) capabilities and measures amplification
 effects — how many sequential partial spends can be chained from a single
 initial vault, and what are the cumulative costs.
 
+=== RELATED WORK ===
+CCV's partial withdrawal via trigger_and_revault is a core feature of
+BIP-443 [Ing23] (https://bips.dev/443/).  CTV's all-or-nothing unvault is
+inherent to BIP-119 [Rub20] (https://bips.dev/119/).  OP_VAULT supports
+partial withdrawal with automatic revault (BIP-345 [OS23],
+https://bips.dev/345/): start_withdrawal with excess creates a revault
+output.  The splitting-attack implications of revault are analyzed in
+Harding [Har24] (https://delvingbitcoin.org/t/op-vault-comments/521) and
+measured empirically in exp_watchtower_exhaustion.  This experiment measures
+the cost AMPLIFICATION of sequential partial withdrawals — the cumulative
+overhead of N partial withdrawals vs. a single full withdrawal.
+
 CTV: No native revault support.  The entire vault amount must be unvaulted
 at once.  Partial withdrawals require destroying and recreating the vault
 with new CTV hashes.
@@ -11,6 +23,12 @@ with new CTV hashes.
 CCV: Native revault via `trigger_and_revault` clause.  A single trigger
 splits the vault into an Unvaulting output (for withdrawal) and a new
 Vault output (holding the remainder).  This can be chained repeatedly.
+
+OP_VAULT: Native partial withdrawal via start_withdrawal.  Excess value
+beyond the CTV template is automatically revaulted.
+
+CAT+CSFS: No native revault.  Like CTV, the full amount must be unvaulted
+atomically.  Partial withdrawals require recovery + re-vaulting.
 
 Key comparison points:
 - Can the vault do partial withdrawals at all?
@@ -20,7 +38,7 @@ Key comparison points:
 
 from adapters.base import VaultAdapter
 from harness.metrics import ExperimentResult
-from harness.regtest_caveats import emit_vsize_is_primary
+from harness.regtest_caveats import emit_vsize_is_primary, emit_regtest_caveats
 from experiments.registry import register
 
 
@@ -51,6 +69,14 @@ def run(adapter: VaultAdapter) -> ExperimentResult:
     from harness.metrics import TxMetrics
 
     try:
+        result.observe(
+            "PRIOR ART: CCV's partial withdrawal via trigger_and_revault is a "
+            "core feature of BIP-443 [Ing23].  CTV's all-or-nothing unvault is "
+            "inherent to BIP-119 [Rub20].  OP_VAULT supports partial withdrawal "
+            "with automatic revault (BIP-345 [OS23]).  This experiment measures "
+            "the cumulative cost of N sequential partial withdrawals."
+        )
+
         if not adapter.supports_revault():
             result.observe(
                 f"{adapter.name} does not support native revault.  "
@@ -139,5 +165,14 @@ def run(adapter: VaultAdapter) -> ExperimentResult:
         result.error = str(e)
         result.observe(f"FAILED: {e}")
 
-    emit_vsize_is_primary(result)
+    emit_regtest_caveats(
+        result,
+        experiment_specific=(
+            "Revault chaining is a consensus property — CCV's trigger_and_revault "
+            "clause (BIP-443 [Ing23]) and CTV's all-or-nothing unvault (BIP-119 "
+            "[Rub20]) are identical on regtest and mainnet.  Per-step vsize is "
+            "structurally constant (verified by watchtower_exhaustion experiment).  "
+            "The cumulative cost model is valid; fee amounts are regtest artifacts."
+        ),
+    )
     return result

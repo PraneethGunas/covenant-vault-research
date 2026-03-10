@@ -118,8 +118,14 @@ def run(adapter: VaultAdapter) -> ExperimentResult:
 
     # ── CCV/OP_VAULT: execute the splitting attack ─────────────────
     # Fallback vsizes for fee table (replaced by measurements if splitting succeeds).
-    # Defaults from empirical runs: CCV trigger_revault=162, recover=122;
-    # OP_VAULT trigger_revault=292, recover=246.
+    # These defaults come from prior empirical runs on regtest and are only used
+    # if the splitting attack throws an exception before measuring actual vsizes.
+    # Name-based dispatch is necessary here because the fallback vsizes are
+    # structurally different per covenant (CCV uses simpler witness programs than
+    # OP_VAULT's taproot-based recovery).  No single capability flag determines
+    # transaction structure.
+    # Defaults: CCV trigger_revault=162, recover=122;
+    #           OP_VAULT trigger_revault=292, recover=246.
     measured_trigger_vsize = 292 if adapter.name == "opvault" else 162
     measured_recover_vsize = 246 if adapter.name == "opvault" else 122
     try:
@@ -555,23 +561,23 @@ def _run_splitting_attack(adapter, result, rpc, max_splits):
             fee_sats=attacker_cost_per_split + watchtower_cost_per_split,
         ))
 
-    # ── Phase 5: halseth estimate check ─────────────────────────────
-    result.observe("\n=== Phase 5: halseth estimate verification ===")
+    # ── Phase 5: Harding [Har24] estimate check ─────────────────────────────
+    result.observe("\n=== Phase 5: Harding [Har24] estimate verification ===")
 
     result.observe(
-        f"halseth estimated ~3,000 chunks per block.  "
+        f"Harding [Har24] estimated ~3,000 chunks per block.  "
         f"Our measurement: {max_splits_per_block} trigger txs/block "
         f"(trigger weight = {trigger_weight_per_split} WU).  "
         f"{'CONSISTENT' if abs(max_splits_per_block - 3000) < 1500 else 'DIVERGENT'} "
-        f"with halseth estimate."
+        f"with Harding [Har24] estimate."
     )
 
-    halseth_reserve_btc = 0.3
-    halseth_reserve_sats = int(halseth_reserve_btc * 100_000_000)
+    harding_reserve_btc = 0.3
+    harding_reserve_sats = int(harding_reserve_btc * 100_000_000)
     if recover_vsize > 0 and max_recoveries_per_block > 0:
-        implied_fee_rate = halseth_reserve_sats / (max_recoveries_per_block * recover_vsize)
+        implied_fee_rate = harding_reserve_sats / (max_recoveries_per_block * recover_vsize)
         result.observe(
-            f"halseth estimated ~0.3 BTC watchtower reserve.  "
+            f"Harding [Har24] estimated ~0.3 BTC watchtower reserve.  "
             f"Our measurements imply this reserve handles one block of "
             f"recoveries at ~{implied_fee_rate:.1f} sat/vB fee rate.  "
             f"At 10 sat/vB, watchtower needs "
@@ -600,11 +606,27 @@ def _run_splitting_attack(adapter, result, rpc, max_splits):
     # We'll estimate overhead+output conservatively at ~55 vB
 
     FIXED_OVERHEAD_ESTIMATE = 55  # version + locktime + segwit marker + 1 output
+    # Uncertainty: overhead could range from ~45 vB (minimal: 4+4+0.5+31+varint) to
+    # ~65 vB (with witness discount variation and output script differences).
+    # This gives per-input cost uncertainty of ±10 vB.
+    OVERHEAD_UNCERTAINTY = 10  # ±10 vB on the fixed overhead estimate
     input_cost_estimate = max(recover_vsize - FIXED_OVERHEAD_ESTIMATE, recover_vsize // 2)
+    input_cost_low = max(recover_vsize - (FIXED_OVERHEAD_ESTIMATE + OVERHEAD_UNCERTAINTY), recover_vsize // 2)
+    input_cost_high = max(recover_vsize - (FIXED_OVERHEAD_ESTIMATE - OVERHEAD_UNCERTAINTY), recover_vsize // 2)
     result.observe(
         f"Individual recovery: {recover_vsize} vB "
-        f"(estimated {FIXED_OVERHEAD_ESTIMATE} vB overhead + "
-        f"{input_cost_estimate} vB per input)"
+        f"(estimated {FIXED_OVERHEAD_ESTIMATE} vB overhead ±{OVERHEAD_UNCERTAINTY} vB + "
+        f"{input_cost_estimate} vB per input [{input_cost_low}–{input_cost_high} vB range])"
+    )
+    result.observe(
+        f"NOTE: The overhead decomposition ({FIXED_OVERHEAD_ESTIMATE} vB fixed + "
+        f"{input_cost_estimate} vB/input) is estimated, not validated by constructing "
+        f"an actual batched recovery transaction.  The ±{OVERHEAD_UNCERTAINTY} vB "
+        f"uncertainty on overhead translates to ±{OVERHEAD_UNCERTAINTY} vB per input.  "
+        f"At 100 inputs, this is ±{OVERHEAD_UNCERTAINTY * 100} vB total (~"
+        f"{OVERHEAD_UNCERTAINTY * 100 / (FIXED_OVERHEAD_ESTIMATE + 100 * input_cost_estimate) * 100:.1f}% "
+        f"of estimated batch size).  The qualitative conclusions (batching saves "
+        f"~45% and extends viable fee range ~1.8x) are robust to this uncertainty."
     )
 
     result.observe(

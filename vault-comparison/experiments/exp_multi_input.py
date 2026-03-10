@@ -33,7 +33,7 @@ based on pymatt's cross_input_accounting_attack.py.
 from adapters.base import VaultAdapter, VaultState
 from harness.metrics import ExperimentResult
 from harness.rpc import RegTestRPC
-from harness.regtest_caveats import emit_vsize_is_primary
+from harness.regtest_caveats import emit_vsize_is_primary, emit_regtest_caveats
 from experiments.registry import register
 
 
@@ -511,5 +511,16 @@ def run(adapter: VaultAdapter) -> ExperimentResult:
         result.error = str(e)
         result.observe(f"FAILED: {e}")
 
-    emit_vsize_is_primary(result)
+    emit_regtest_caveats(
+        result,
+        experiment_specific=(
+            "Batching behavior is a consensus property — CTV's input-count "
+            "commitment (BIP-119 [Rub20]) and CCV's batched trigger support "
+            "(BIP-443 [Ing23]) are identical on regtest and mainnet.  The "
+            "DEDUCT accounting footgun is a consensus failure mode documented "
+            "by Ingala [Ing23]; our regtest demonstration faithfully reproduces "
+            "it.  Scaling projections use measured per-vault marginal weight "
+            "against the 400k WU standardness limit."
+        ),
+    )
     return result
