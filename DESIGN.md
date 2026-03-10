@@ -17,6 +17,10 @@ The goal is to separate design-level tradeoffs from implementation-level bugs, a
 
 **Scope exclusion: Ark, BitVM, and protocol-layer constructs.** Ark uses a virtual UTXO model with an operator-mediated coordination layer — it is a *protocol* built atop Bitcoin, not an opcode-level covenant. BitVM uses fraud proofs and off-chain computation verification rather than on-chain covenant enforcement. Both are architecturally distinct from the opcode-level covenant primitives (CTV, CCV, OP_VAULT, CAT+CSFS) compared here. Including them would require modeling protocol-layer trust assumptions and interactive communication rounds that have no analog in our single-transaction covenant framework.
 
+**Forward-looking: composability with Lightning and Ark.** While Ark is excluded from direct comparison, the fee sensitivity results have implications for vault-backed channel factories and Lightning channels. In high-fee environments where CTV vault recovery costs remain low (~180 vB) but CCV/OP_VAULT watchtower costs scale linearly with splits, a vault backing multiple Lightning channels would face different guardian economics depending on the covenant used. CTV's fee-invariant pinning vulnerability could interact with Lightning's own HTLC pinning surface (see Riard [Ria23] on replacement cycling). A vault-backed Ark virtual UTXO tree would compound the fee sensitivity: each level of the tree multiplies the watchtower exhaustion exposure. These interactions are rich territory for future work but require modeling the protocol-layer dynamics that our single-transaction framework cannot capture.
+
+**Forward-looking: cluster mempool impact.** The ongoing Bitcoin Core cluster mempool redesign (Wuille/Daftuar [WD24]) replaces per-transaction ancestor/descendant limits with cluster-based evaluation. This could fundamentally change the fee pinning calculus for CTV vaults: the 25-descendant limit exploited in experiment C may be replaced by cluster size limits with different eviction logic. If cluster mempool eliminates the specific descendant-chain pinning vector, CTV's primary vulnerability would shift from fee pinning (cheap, fee-invariant) to address reuse (structural, prevention-only) — potentially changing the fee-dependent crossover result. We note this as a forward-looking consideration; the current analysis uses Bitcoin Core's deployed mempool policy as of 2026.
+
 ### 1.1 Prior Art and Contribution Scope
 
 This work builds on a body of prior research in covenant-based vault custody. The full attribution mapping is in [`REFERENCES.md`](../REFERENCES.md).
@@ -29,14 +33,14 @@ The vault lifecycle model and threat vocabulary follow Swambo et al. ([arXiv 200
 
 The conceptual contribution is a *unified measurement framework* that reveals how design-level tradeoffs compose under realistic fee environments. Specifically:
 
-1. **The first four-way empirical comparison.** Regtest-measured transaction sizes for CTV, CCV, OP_VAULT, and CAT+CSFS under a uniform adapter interface (16 experiments, 12 threat models). Prior analysis compared at most two designs, or used estimates rather than measured values. The OP_VAULT vsize measurements reveal the fee-input overhead: all non-deposit transactions are 80–90 vB larger than expected (§4.2), making OP_VAULT's lifecycle 36% more expensive than CCV's.
+1. **The first four-way empirical comparison.** Regtest-measured transaction sizes for CTV, CCV, OP_VAULT, and CAT+CSFS under a uniform adapter interface (16 experiments, 11 threat models). Prior analysis compared at most two designs, or used estimates rather than measured values. The OP_VAULT vsize measurements reveal the fee-input overhead: all non-deposit transactions are 80–90 vB larger than expected (§4.2), making OP_VAULT's lifecycle 36% more expensive than CCV's.
 
 2. **Fee-dependent inversion of security rankings.** The cross-experiment fee sensitivity synthesis (experiment J) shows that the *relative* security ordering of vault designs flips depending on fee environment. In low-fee regimes (1–10 sat/vB), CCV and OP_VAULT are safer than CTV (fee pinning is cheap but splitting is infeasible). In high-fee regimes (100–500 sat/vB), watchtower exhaustion becomes feasible against CCV/OP_VAULT while CTV's fee pinning cost remains negligible — the security ordering inverts. This fee-dependent crossover is the strongest finding: no prior analysis has shown that the answer to "which vault is safest?" depends on the fee environment.
 
-3. **The inverse-ranking structural result.** Griefing resistance and fund safety under key loss are anti-correlated across the CTV/CCV/OP_VAULT triple: OP_VAULT > CTV > CCV for griefing resistance, CCV > CTV > OP_VAULT for key-loss safety. This clean anti-correlation holds because stronger recovery authorization (OP_VAULT) reduces griefing surface but increases the damage from key compromise. CAT+CSFS is a **partial outlier**: it has the strongest hot-key theft resistance (griefing-only, no theft path) but the weakest cold-key recovery safety (unconstrained OP_CHECKSIG), demonstrating that the tradeoff space has more than one dimension. The anti-correlation is thus a property of the CTV/CCV/OP_VAULT design space, not a universal law — CAT+CSFS's dual-verification architecture occupies a position that does not fit the single-axis ranking. This is a necessary design tradeoff (not an implementation artifact): blocking unauthorized recovery *requires* a key whose loss disables recovery.
+3. **The two-dimensional security tradeoff space.** Griefing resistance and fund safety under key loss are anti-correlated across the CTV/CCV/OP_VAULT triple: OP_VAULT > CTV > CCV for griefing resistance, CCV > CTV > OP_VAULT for key-loss safety. This clean anti-correlation holds because stronger recovery authorization reduces griefing surface but increases the damage from key compromise — a necessary design tradeoff, not an implementation artifact. However, the four-way comparison reveals that the tradeoff space is **two-dimensional**, not single-axis. CAT+CSFS occupies a distinct position: strongest hot-key theft resistance (dual CSFS+CHECKSIG prevents fund redirection, limiting attackers to griefing-only) but weakest cold-key recovery safety (unconstrained OP_CHECKSIG = immediate theft). This means CAT+CSFS does not fit on the CTV/CCV/OP_VAULT ranking axis — it represents a different design philosophy (introspection-based vs. opcode-based covenants) that trades cold-key safety for hot-key robustness. The two dimensions are: (a) griefing resistance vs. fund safety under key loss (the CTV/CCV/OP_VAULT axis), and (b) hot-key attack surface vs. cold-key attack surface (where CAT+CSFS diverges). A practitioner choosing between designs must consider both dimensions relative to their threat model.
 
 4. **Empirical confirmation/correction of prior estimates.** Harding's [Har24] ~3,000 chunks/block estimate is confirmed for OP_VAULT (measured: 3,427 splits/block at trigger_and_revault weight ~1,168 WU). For CCV, the smaller trigger_and_revault transaction (162 vB vs OP_VAULT's 292 vB) yields approximately 6,172 splits/block — roughly 80% more than OP_VAULT, because Harding's analysis assumed OP_VAULT-sized transactions. OP_VAULT hand-estimated vsizes were significantly wrong (trigger: 200→292, recovery: 170→246) due to the 2-input fee-wallet pattern.
-5. **CCVWildSpend: full vault UTXO theft via OP_SUCCESS (TM8).** The CCV mode confusion risk was documented by Ingala as a design decision. Our contribution is (a) the `CCVWildSpend` transition model — a vault UTXO consumed with zero typed outputs, funds vanishing into attacker-controlled UTXOs; (b) systematic mode sweep confirming all undefined values (3, 4, 7, 128, 255) produce bypass; (c) escalation from synthetic contract to production-shaped Vault taptree. This is closer to a high-severity bug report than a research contribution, but the transition model and systematic sweep are new. **Verified via `exp_ccv_mode_bypass` on CCV regtest (2026-02-22).** All 5 undefined modes confirmed: THEFT CONFIRMED on each, 110 vB per bypass spend.
+5. **CCVWildSpend: developer footgun documentation via OP_SUCCESS (TM8).** The OP_SUCCESS behavior for undefined CCV mode values is **specified consensus behavior** in BIP-443, deliberately designed for forward-compatible soft-fork extensions. Ingala [Ing23] documented this as a design decision. No vault developer using the pymatt library would accidentally trigger this — the library exposes named constants that prevent misuse. Our contribution is (a) the `CCVWildSpend` transition model documenting the *consequence* of the footgun — a vault UTXO consumed with zero typed outputs, funds redirected to attacker-controlled UTXOs; (b) systematic mode sweep confirming all undefined values (3, 4, 7, 128, 255) produce complete covenant bypass on a production-shaped taptree; (c) developer education: the boundary between defined and undefined modes is at the enumeration edge ({-1,0,1,2} are defined; all others trigger OP_SUCCESS), not at a bitmask boundary. **Verified via `exp_ccv_mode_bypass` on CCV regtest (2026-02-22).** All 5 undefined modes confirmed: covenant bypass on each, 110 vB per spend.
 
 The per-experiment relationship to prior work is detailed in `REFERENCES.md` §2.
 
@@ -406,22 +410,21 @@ Tests three CCV-specific edge cases classified as developer footguns, not advers
 - Pseudocode (checkcontractverify.md lines 75–76): `if flags < CCV_FLAG_CHECK_INPUT or flags > CCV_FLAG_DEDUCT_OUTPUT_AMOUNT: return success()`
 - Valid range: [-1, 0, 1, 2]. Everything else → unconditional success.
 - Uses pymatt's StandardAugmentedP2TR + StandardClause with custom CScript to construct each test contract, and ContractManager to fund/spend on regtest.
-- Impact if deployed: An output with an undefined mode has zero covenant enforcement. Anyone can spend it. Severity: Critical if deployed, but this is a static-analysis-catchable bug, not a runtime attack.
+- Impact if deployed: An output with an undefined mode has zero covenant enforcement. Anyone can spend it. This is specified BIP-443 behavior for forward compatibility, not a bug — but a developer who accidentally uses an undefined mode value would lose all covenant enforcement. The pymatt library prevents this via named constants; the risk is for developers writing raw CCV scripts.
 - Design tradeoff: OP_SUCCESS enables clean soft-fork upgrades (new flag meanings without hard forks) but creates a silent failure mode for developers.
 
-**Threat model — CCVWildSpend: full vault UTXO theft via OP_SUCCESS [TM8]:**
-- Escalation of the mode confusion footgun to an actual Vault contract. Experiment: `exp_ccv_mode_bypass.py` (vault-comparison framework).
-- Construction: A `VulnerableVault` identical to the production `Vault` taptree (trigger + recover leaves), except the recover leaf's CCV uses `mode=3` (or 4, 7, 128, 255).
-- Attack: Anyone who can construct the witness path to the poisoned recover leaf can spend the vault UTXO to an arbitrary address. No signature, no output validation, no amount checking.
+**Threat model — CCVWildSpend: developer footgun via OP_SUCCESS on undefined modes [TM8]:**
+- Escalation of the mode confusion footgun to a production-shaped vault taptree. Experiment: `exp_ccv_mode_bypass.py` (vault-comparison framework).
+- Construction: A `VulnerableVault` identical to the production `Vault` taptree (trigger + recover leaves), except the recover leaf's CCV uses a mode value outside the defined enumeration {-1, 0, 1, 2}.
+- Consequence: Anyone who can construct the witness path to the poisoned recover leaf can spend the vault UTXO to an arbitrary address. No signature, no output validation, no amount checking.
 - Control: Same vault with `mode=0` rejects the identical spend (CCV checks output scriptPubKey against `recover_pk`).
 - Sweep: All tested undefined modes (3, 4, 7, 128, 255) produce full covenant bypass.
-- Severity: CRITICAL. This is the highest-severity CCV finding.
-  - Single-byte encoding error causes complete fund loss.
-  - The vault address and taptree are structurally indistinguishable from a correct vault.
-  - Not a theoretical concern — realistic encoding paths include: off-by-one (mode=3, one past DEDUCT_OUTPUT_AMOUNT), unsigned cast (−2 → 254), byte truncation in serialization.
-- Distinction from `mode_confusion_attack.py`: That test uses a synthetic `ModeConfusionContract`. This test uses the actual `Vault` taptree structure with only the mode value changed, demonstrating that the vulnerability affects production-shaped contracts.
-- Prior art: Ingala documented OP_SUCCESS for undefined CCV flags as a design decision for soft-fork safety. The `CCVWildSpend` transition model (vault UTXO → zero typed outputs) and the systematic mode sweep are new empirical contributions.
-- Status: **Verified on CCV regtest (2026-02-22).** Control (mode=0) correctly rejected mutated spend. All 5 undefined modes (3, 4, 7, 128, 255) accepted — THEFT CONFIRMED on each. Bypass spend vsize: 110 vB, weight: 438–440. Experiment: `vault-comparison/experiments/exp_ccv_mode_bypass.py`.
+- **Important framing**: This is **specified consensus behavior** in BIP-443, not a vulnerability. The BIP explicitly states: "Any other value of the mode makes the opcode succeed validation immediately." The OP_SUCCESS semantics are a deliberate forward-compatibility mechanism enabling future soft-fork extensions. No vault developer using the pymatt library would accidentally trigger this — the library exposes named constants (CCV_FLAG_CHECK_INPUT, etc.) that prevent misuse. The risk is for developers writing raw CCV scripts without using the typed API.
+  - BIP-443 defines modes as a discrete enumeration {-1, 0, 1, 2}, not a bitmask — mode 3 is undefined despite appearing to be a bitwise composition of modes 1 and 2.
+  - Realistic footgun paths include: off-by-one (mode=3, one past DEDUCT_OUTPUT_AMOUNT), unsigned cast (−2 → 254), byte truncation in serialization.
+- Distinction from `mode_confusion_attack.py`: That test uses a synthetic `ModeConfusionContract`. This test uses the actual `Vault` taptree structure with only the mode value changed, demonstrating that the behavior affects production-shaped contracts.
+- Prior art: Ingala [Ing23] documented OP_SUCCESS for undefined CCV flags as a deliberate design decision for soft-fork safety. Our contribution is the production-vault taptree escalation, systematic measurement, and the CCVWildSpend transition model as developer education material.
+- Status: **Verified on CCV regtest (2026-02-22).** Control (mode=0) correctly rejected mutated spend. All 5 undefined modes (3, 4, 7, 128, 255) accepted — complete covenant bypass on each. Bypass spend vsize: 110 vB, weight: 438–440. Experiment: `vault-comparison/experiments/exp_ccv_mode_bypass.py`.
 
 **Threat model — keypath bypass (Taproot misconfiguration):**
 - Attacker: Has the private key corresponding to the Taproot internal key. This only exists if the developer passed a real public key as `alternate_pk` instead of using a NUMS point.
@@ -464,10 +467,10 @@ Tests the revault splitting attack described by halseth in the OP_VAULT discussi
 - Defender response: Same as CCV (batch recoveries, increase spend_delay), plus: if recoveryauth key is compromised, the attacker can ALSO grief the recovery (see TM6 in §4.1).
 - Residual risk: Identical structure to CCV — at high fees, watchtower rationally abandons dust UTXOs. Higher per-recovery cost means the threshold is reached sooner than CCV.
 
-### I. ccv_mode_bypass [ccv_only, security, critical]
-Escalates the synthetic mode-confusion finding from experiment G to production-shaped vault taptrees. Constructs a `VulnerableVault` with the same taptree structure as pymatt's production `Vault` (trigger + recover leaves), but the recover leaf's CCV uses an undefined mode value. Demonstrates CCVWildSpend: vault UTXO → zero typed outputs → funds into attacker-controlled UTXOs. Systematic mode sweep across 5 undefined values (3, 4, 7, 128, 255) confirms all produce complete covenant bypass. See G (ccv_edge_cases) for the full threat model (TM8). Experiment: `exp_ccv_mode_bypass.py`.
+### I. ccv_mode_bypass [ccv_only, security, developer_footguns]
+Escalates the synthetic mode-confusion finding from experiment G to production-shaped vault taptrees. Constructs a `VulnerableVault` with the same taptree structure as pymatt's production `Vault` (trigger + recover leaves), but the recover leaf's CCV uses an undefined mode value outside the defined enumeration {-1, 0, 1, 2}. Documents the CCVWildSpend transition model: vault UTXO → zero typed outputs → funds redirected to attacker-controlled UTXOs. The OP_SUCCESS behavior is **specified consensus behavior** in BIP-443, not a vulnerability — this experiment serves as developer education material. Systematic mode sweep across 5 undefined values (3, 4, 7, 128, 255) confirms all produce complete covenant bypass. See G (ccv_edge_cases) for the full threat model (TM8). Experiment: `exp_ccv_mode_bypass.py`.
 
-- Prior art: Ingala [Ing23] documented OP_SUCCESS for undefined CCV flags as a design decision. The production-vault escalation and systematic measurement are new contributions.
+- Prior art: Ingala [Ing23] documented OP_SUCCESS for undefined CCV flags as a deliberate design decision for soft-fork safety. Our contribution is the production-vault taptree escalation, systematic measurement, and the CCVWildSpend transition model as developer education.
 - Key result: All 5 undefined modes produce full covenant bypass. Bypass spend vsize: 110 vB, weight: 438–440.
 - Status: **Verified on CCV regtest (2026-02-22).**
 
@@ -637,15 +640,16 @@ TM  Attack class              CTV                         CCV                   
                               overpays miners.            deposits to same addr are    Each can be triggered       P2TR address is unique
                                                           individually spendable.      and recovered normally.     per coin/amount.
 
-8   CCV mode bypass           N/A (CTV has no CCV         CRITICAL — undefined CCV     N/A (OP_VAULT uses         N/A (CAT+CSFS uses         G, I
-    (OP_SUCCESS via            opcode; script structure    mode values (3, 4, 7, 128,   OP_VAULT / OP_VAULT_RECOVER OP_CAT / OP_CSFS;
-    undefined CCV flags)       is CTV-only)               255) cause OP_SUCCESS.        opcodes, not CCV)          no mode parameter)
+8   CCV mode bypass           N/A (CTV has no CCV         DEVELOPER FOOTGUN —          N/A (OP_VAULT uses         N/A (CAT+CSFS uses         G, I
+    (OP_SUCCESS via            opcode; script structure    undefined CCV mode values    OP_VAULT / OP_VAULT_RECOVER OP_CAT / OP_CSFS;
+    undefined CCV flags)       is CTV-only)               (3, 4, 7, 128, 255) cause    opcodes, not CCV)          no mode parameter)
+                                                          OP_SUCCESS (BIP-443 specified
+                                                          behavior for forward compat).
                                                           Full covenant bypass: no
                                                           signature, no output
-                                                          validation, no amount
-                                                          checking.  A single-byte
-                                                          encoding bug in wallet/
-                                                          compiler → complete fund
+                                                          validation.  A mode value
+                                                          outside {-1,0,1,2} in raw
+                                                          CCV scripts → complete fund
                                                           loss.  CCVWildSpend:
                                                           vault UTXO → arbitrary
                                                           attacker-controlled

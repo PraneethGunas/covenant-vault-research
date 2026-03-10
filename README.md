@@ -183,7 +183,7 @@ The four-way comparison reveals a distinct vulnerability profile for each covena
 
 **CTV** — Hot key compromise leads to fund theft (delayed by timelock). Fee pinning via anchor outputs. No revault means no splitting attacks. Address reuse causes permanent fund loss.
 
-**CCV** — Keyless recovery griefing (anyone can force-recover, lowest attacker bar). Watchtower fee exhaustion via revault splitting. No fee pinning (no anchor outputs). Safe address reuse. **Critical: undefined CCV mode values (TM8) cause OP_SUCCESS — complete covenant bypass, full vault theft with no signature required.**
+**CCV** — Keyless recovery griefing (anyone can force-recover, lowest attacker bar). Watchtower fee exhaustion via revault splitting. No fee pinning (no anchor outputs). Safe address reuse. **Developer footgun: undefined CCV mode values (TM8) trigger OP_SUCCESS — specified BIP-443 behavior for forward compatibility, but a mode value outside {-1,0,1,2} in raw scripts causes complete covenant bypass.**
 
 **OP_VAULT** — Authorized recovery blocks keyless griefing (requires recoveryauth key). Same revault-splitting vulnerability as CCV. Fee-input model eliminates pinning. Safe address reuse. Trigger key theft mitigated by watchtower + authorized recovery race.
 

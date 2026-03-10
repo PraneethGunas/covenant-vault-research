@@ -72,6 +72,18 @@ Covered in: Bitcoin Optech Newsletter #291, February 28, 2024.
 
 A Rust proof-of-concept vault implementation using only OP_CAT (BIP-347) and existing consensus rules — no OP_CHECKSIGFROMSTACK required. Uses the Schnorr discrete-log trick (forcing pubkey and nonce to generator G) described by Poelstra [Poe21] to emulate CSFS, achieving transaction introspection with a single opcode. The vault enforces amount preservation (trigger output matches input), relative timelocks (contest period), and destination locking (withdrawal address fixed at trigger time). Our CAT+CSFS vault differs by using real CSFS (BIP-348) instead of the G-trick, which simplifies the witness structure and avoids the requirement that the signing key be the generator, at the cost of requiring a second soft fork (BIP-348 in addition to BIP-347).
 
+### [dgpv24] dgpv — "Analyzing simple vault covenant with Alloy"
+dgpv. "Analyzing simple vault covenant with Alloy." Delving Bitcoin, 2024.
+URL: https://delvingbitcoin.org/t/analyzing-simple-vault-covenant-with-alloy/819
+
+Applies Alloy model checking to analyze vault covenant properties, specifically exploring whether formal verification could have caught vulnerabilities in the OP_CAT vault prototype [Rij24]. Key findings include the importance of input index enforcement and output count constraints in covenant scripts. This formal analysis approach is complementary to our empirical regtest-based methodology — Alloy verifies structural properties exhaustively over a bounded model, while our framework measures concrete economic costs and attack feasibility on a running implementation. Particularly relevant to experiments G/I (CCV mode bypass — formal verification could catch undefined mode usage), N (witness manipulation — formal models could verify tamper resistance), and O (destination lock — Alloy could verify the fixed-destination invariant).
+
+### [Optech-Vaults] Bitcoin Optech — "Vaults" topic page
+Bitcoin Optech. "Vaults." Topic page (continuously updated).
+URL: https://bitcoinops.org/en/topics/vaults/
+
+Canonical overview resource tracking vault-related developments across BIPs, implementations, and discussion threads. Provides context for BIP-345 withdrawal, CTV+CSFS proposals, and OP_CAT vault prototypes.
+
 ### Additional references
 
 **Bitcoin Optech Newsletter.** Multiple editions covering CPFP carve-out, package relay, v3/TRUC transactions, and OP_VAULT analysis. Cite specific editions for fee pinning context.
@@ -151,7 +163,7 @@ The revault splitting attack originates with halseth in the OP_VAULT discussion,
 
 ### I. ccv_mode_bypass
 
-Escalates the synthetic mode-confusion finding from experiment G to production-shaped vault taptrees. Constructs a `VulnerableVault` with the same taptree structure as pymatt's production `Vault` (trigger + recover leaves), but the recover leaf's CCV uses an undefined mode value. Demonstrates the CCVWildSpend transition model: vault UTXO → zero typed outputs → funds into attacker-controlled UTXOs. Systematic mode sweep across 5 undefined values (3, 4, 7, 128, 255) confirms all produce complete covenant bypass. Prior art: Ingala [Ing23] documented OP_SUCCESS as a design decision for soft-fork safety; our contribution is the production-vault escalation and systematic measurement. Status: Verified via regtest measurement (2026-02-22).
+Escalates the synthetic mode-confusion finding from experiment G to production-shaped vault taptrees. Constructs a `VulnerableVault` with the same taptree structure as pymatt's production `Vault` (trigger + recover leaves), but the recover leaf's CCV uses an undefined mode value. Documents the CCVWildSpend transition model: vault UTXO → zero typed outputs → funds into attacker-controlled UTXOs. **Important framing**: The OP_SUCCESS behavior for undefined CCV modes is **specified consensus behavior** in BIP-443, not a vulnerability. The BIP explicitly states: "Any other value of the mode makes the opcode succeed validation immediately." BIP-443 defines modes as a discrete enumeration {-1, 0, 1, 2}, not a bitmask — mode 3 is undefined despite appearing to be a bitwise composition. Systematic mode sweep across 5 undefined values (3, 4, 7, 128, 255) confirms all produce complete covenant bypass. Prior art: Ingala [Ing23] documented OP_SUCCESS as a deliberate design decision for soft-fork safety; our contribution is the production-vault taptree escalation, systematic measurement, and the CCVWildSpend transition model as developer education material. Status: Verified via regtest measurement (2026-02-22).
 
 ### J. fee_sensitivity
 
@@ -203,7 +215,7 @@ This work provides an empirical comparison framework for CTV ([BIP-119](https://
 
 2. Fee-dependent inversion of security rankings — the cross-experiment fee sensitivity synthesis (experiment J) shows that the relative security ordering of vault designs flips depending on fee environment. In low-fee regimes, CCV/OP_VAULT are safer (splitting is infeasible); in high-fee regimes, watchtower exhaustion becomes feasible while CTV's fee pinning cost remains negligible. No prior analysis has demonstrated this crossover.
 
-3. The inverse-ranking structural result — griefing resistance and fund safety under key loss are necessarily anti-correlated across designs (OP_VAULT > CTV > CCV for griefing resistance; CCV > CTV > OP_VAULT for key-loss safety). This is a necessary tradeoff, not an implementation artifact.
+3. The two-dimensional security tradeoff space — griefing resistance and fund safety under key loss are anti-correlated across the CTV/CCV/OP_VAULT triple (a necessary tradeoff, not an implementation artifact). The four-way comparison reveals a second dimension: CAT+CSFS occupies a distinct position (strongest hot-key resistance, weakest cold-key safety) that does not fit the single-axis ranking, demonstrating that the design space requires two dimensions to characterize.
 
 4. Empirical confirmation/correction of prior estimates — For OP_VAULT, we measure 3,427 splits/block (trigger_and_revault weight ~1,168 WU), consistent with Harding's [Har24] ~3,000 estimate. For CCV, the smaller trigger_and_revault transaction (162 vB vs OP_VAULT's 292 vB) yields approximately 6,172 splits/block — roughly 80% more than OP_VAULT, because Harding's analysis assumed OP_VAULT-sized transactions. OP_VAULT hand-estimated vsizes corrected (trigger: 200→292, recovery: 170→246). Parameterized economic models extending [Har24] with variable withdrawal fractions, batched recovery quantification, and spend-delay sensitivity.
 
