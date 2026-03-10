@@ -1,4 +1,4 @@
-"""Experiment H: CCV-Specific Edge Cases and Developer Footguns
+"""Experiment G: CCV-Specific Edge Cases and Developer Footguns
 
 Tests three CCV-specific edge cases classified as developer footguns
 and misconfiguration risks, not protocol-level attack vectors.
@@ -143,10 +143,11 @@ def _make_mode_contract(mods, mode: int, internal_pk: bytes, recover_pk: bytes):
     """Build a minimal P2TR contract with a single CCV clause using the given mode.
 
     The sweep clause pushes: 0, <output_index>, <recover_pk>, 0, <mode>, OP_CCV, OP_TRUE.
-    For defined modes (0, 1, 2, 3), CCV enforces covenant rules — a mutated
+    For defined modes (0, 1, 2), CCV enforces covenant rules — a mutated
     spend (different output script) will be rejected.
-    For undefined modes (4, 7, 128, 255), CCV triggers OP_SUCCESS — the entire
-    script succeeds unconditionally, so the mutated spend is accepted.
+    For undefined modes (3, 4, 7, 128, 255), CCV triggers OP_SUCCESS — the
+    entire script succeeds unconditionally, so the mutated spend is accepted.
+    BIP-443 defines modes as an enumeration {-1,0,1,2}, not a bitmask.
     """
     CScript = mods["CScript"]
     OP_SWAP = mods["OP_SWAP"]
@@ -189,17 +190,22 @@ AMOUNT_SATS = 150_000
 FEE_SATS = 1_000
 
 # Mode values to test, with expected behavior per BIP-443:
-# Defined flags: 0 (default), 1 (CHECK_INPUT), 2 (DEDUCT_OUTPUT_AMOUNT),
-#   3 (CHECK_INPUT | DEDUCT_OUTPUT_AMOUNT — both flags composed)
-# Undefined flags: 4, 7, 128, 255 — trigger OP_SUCCESS (forward-compat)
+# BIP-443 defines modes as a DISCRETE ENUMERATION (not a bitmask):
+#   -1 = CCV_MODE_CHECK_INPUT
+#    0 = CCV_MODE_CHECK_OUTPUT
+#    1 = CCV_MODE_CHECK_OUTPUT_IGNORE_AMOUNT
+#    2 = CCV_MODE_CHECK_OUTPUT_DEDUCT_AMOUNT
+# Any value outside {-1, 0, 1, 2} triggers OP_SUCCESS (forward-compat).
+# NOTE: Mode 3 IS UNDEFINED despite appearing to be a bitwise OR of
+# modes 1 and 2 — the mode parameter is not a bitmask.
 TEST_MODES = [
-    (0,   "defined",   "default (check output, preserve amount)"),
-    (1,   "defined",   "CCV_FLAG_CHECK_INPUT"),
-    (2,   "defined",   "CCV_FLAG_DEDUCT_OUTPUT_AMOUNT"),
-    (3,   "defined",   "CHECK_INPUT | DEDUCT_OUTPUT_AMOUNT"),
-    (4,   "undefined", "bit 2 — no assigned meaning"),
-    (7,   "undefined", "bits 0|1|2 — partially overlaps defined"),
-    (128, "undefined", "bit 7 — high bit"),
+    (0,   "defined",   "CCV_MODE_CHECK_OUTPUT"),
+    (1,   "defined",   "CCV_MODE_CHECK_OUTPUT_IGNORE_AMOUNT"),
+    (2,   "defined",   "CCV_MODE_CHECK_OUTPUT_DEDUCT_AMOUNT"),
+    (3,   "undefined", "NOT a valid bitmask composition — outside enumeration"),
+    (4,   "undefined", "outside defined range {-1,0,1,2}"),
+    (7,   "undefined", "well outside defined range"),
+    (128, "undefined", "high byte value"),
     (255, "undefined", "all bits set"),
 ]
 
@@ -214,8 +220,8 @@ def _test_mode_confusion(adapter, result):
       4. Attempt to broadcast
       5. Record whether the spend was accepted (OP_SUCCESS) or rejected (covenant enforced)
 
-    Expected: defined modes (0-3) reject the mutated spend; undefined modes (4+)
-    accept it unconditionally via OP_SUCCESS semantics.
+    Expected: defined modes ({-1, 0, 1, 2}) reject the mutated spend; undefined
+    modes (3+) accept it unconditionally via OP_SUCCESS semantics.
     """
     result.observe("=== Edge Case 1: CCV Mode/Flag Confusion (Empirical) ===")
     result.observe(
@@ -338,8 +344,8 @@ def _test_mode_confusion(adapter, result):
 
     # ── Summary ───────────────────────────────────────────────────────
     result.observe("\n=== Mode Confusion Summary ===")
-    result.observe(f"Defined modes (0-3):   {defined_rejected} rejected, {defined_accepted} accepted")
-    result.observe(f"Undefined modes (4+):  {undefined_accepted} accepted, {undefined_rejected} rejected")
+    result.observe(f"Defined modes (0-2):   {defined_rejected} rejected, {defined_accepted} accepted")
+    result.observe(f"Undefined modes (3+):  {undefined_accepted} accepted, {undefined_rejected} rejected")
 
     total_defined = defined_rejected + defined_accepted
     total_undefined = undefined_accepted + undefined_rejected
