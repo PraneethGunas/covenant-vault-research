@@ -1,4 +1,4 @@
-"""Experiment C: Address Reuse Behavior
+"""Experiment B: Address Reuse Behavior
 
 Tests what happens when a second deposit is made to the same vault address.
 
@@ -510,6 +510,16 @@ def _test_cat_csfs_address_reuse(adapter, result):
         "(creation-time).  A cooperative signer can rescue mismatched deposits "
         "by signing a new trigger — CTV cannot.  In practice, both require "
         "wallet-level single-use address discipline."
+    )
+    result.observe(
+        "LIMITATION: The raw-deposit failure mode for CAT+CSFS is demonstrated "
+        "by structural analysis only, not empirically.  Empirical demonstration "
+        "would require a raw-deposit helper that bypasses VaultPlan creation and "
+        "sends funds directly to the vault scriptPubKey, then attempts to trigger "
+        "with an existing plan's signature.  This is a known gap in the four-way "
+        "comparison — three of four covenants (CTV, CCV, OP_VAULT) have fully "
+        "empirical address reuse results.  Future work should add a raw-deposit "
+        "path to the CAT+CSFS adapter."
     )
 
 
