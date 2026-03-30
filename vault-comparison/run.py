@@ -11,7 +11,7 @@ Usage:
     # Run a single experiment (auto-switches node + initializes regtest)
     uv run run.py run lifecycle_costs --covenant ctv
 
-    # Run on all covenants (CTV → CCV → OP_VAULT → CAT+CSFS)
+    # Run on all covenants (CTV → CCV → OP_VAULT → CAT+CSFS → Simplicity)
     uv run run.py run lifecycle_costs --covenant all
 
     # Run all core experiments across all covenants
@@ -31,9 +31,10 @@ Node switching:
     correct Bitcoin node and initializes regtest (wallet + blocks).
     Use --no-switch to skip this if the node is already running.
 
-    - CTV experiments     → Bitcoin Inquisition (switch-node.sh inquisition)
-    - CCV experiments     → Merkleize Bitcoin (switch-node.sh ccv)
-    - OP_VAULT experiments → jamesob/bitcoin opvault (switch-node.sh opvault)
+    - CTV experiments        → Bitcoin Inquisition (switch-node.sh inquisition)
+    - CCV experiments        → Merkleize Bitcoin (switch-node.sh ccv)
+    - OP_VAULT experiments   → jamesob/bitcoin opvault (switch-node.sh opvault)
+    - Simplicity experiments → Elements + electrs (switch-node.sh elements)
 
     RPC connection is configured via environment variables or .env file:
     - RPC_HOST (default: localhost)
@@ -48,7 +49,24 @@ import subprocess
 import sys
 import os
 import time
+import threading
 from pathlib import Path
+
+
+# ── ANSI colors (disabled if not a TTY) ──────────────────────
+_USE_COLOR = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
+
+def _c(code: str, text: str) -> str:
+    return f"\033[{code}m{text}\033[0m" if _USE_COLOR else text
+
+def _dim(t):     return _c("2", t)
+def _bold(t):    return _c("1", t)
+def _green(t):   return _c("32", t)
+def _red(t):     return _c("31", t)
+def _yellow(t):  return _c("33", t)
+def _cyan(t):    return _c("36", t)
+def _magenta(t): return _c("35", t)
+def _blue(t):    return _c("34", t)
 
 # Ensure project root is on sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -92,6 +110,9 @@ def get_adapter(covenant: str):
     elif covenant == "cat_csfs":
         from adapters.cat_csfs_adapter import CATCSFSAdapter
         return CATCSFSAdapter()
+    elif covenant == "simplicity":
+        from adapters.simplicity_adapter import SimplicityAdapter
+        return SimplicityAdapter()
     else:
         raise ValueError(f"Unknown covenant type: {covenant}")
 
@@ -121,6 +142,7 @@ COVENANT_TO_NODE = {
     "ccv": "ccv",
     "opvault": "opvault",
     "cat_csfs": "inquisition",
+    "simplicity": "elements",
 }
 SWITCH_SCRIPT = PROJECT_ROOT.parent / "switch-node.sh"
 
@@ -220,17 +242,67 @@ def switch_and_init(covenant: str, blocks: int = 300) -> RegTestRPC:
         sys.exit(1)
 
     # Connect and initialize
-    rpc = connect_rpc()
-    do_init(rpc, blocks=blocks)
+    if covenant == "simplicity":
+        # Elements RPC — auto-discover ports from simplex regtest
+        from adapters.simplicity_adapter import discover_simplex_ports
+        rpc_port, _, rpc_user, rpc_pass = discover_simplex_ports()
+        rpc = RegTestRPC(
+            host="127.0.0.1",
+            port=rpc_port,
+            user=rpc_user,
+            password=rpc_pass,
+        )
+        info = rpc._call("getblockchaininfo")
+        print(f"Connected to Elements {info.get('chain', 'unknown')} at block {info.get('blocks', 0)}")
+        # Skip do_init for Elements — simplex regtest seeds its own wallet
+        # and coins. Creating a second wallet breaks the single-wallet RPC path
+        # that the vault-cli depends on.
+    else:
+        rpc = connect_rpc()
+        do_init(rpc, blocks=blocks)
     return rpc
 
 
+class _Spinner:
+    """Live progress indicator that overwrites itself on the same line."""
+    _FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+    def __init__(self, message: str):
+        self._msg = message
+        self._stop = threading.Event()
+        self._thread = None
+
+    def start(self):
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def _run(self):
+        i = 0
+        while not self._stop.is_set():
+            frame = self._FRAMES[i % len(self._FRAMES)]
+            sys.stderr.write(f"\r  {frame} {self._msg}")
+            sys.stderr.flush()
+            i += 1
+            self._stop.wait(0.12)
+        # Clear the spinner line
+        sys.stderr.write(f"\r{' ' * (len(self._msg) + 6)}\r")
+        sys.stderr.flush()
+
+    def stop(self):
+        self._stop.set()
+        if self._thread:
+            self._thread.join(timeout=1)
+
+
 def run_experiment(name: str, covenant: str, rpc: RegTestRPC,
-                   adapter=None) -> ExperimentResult:
+                   adapter=None, verbose: bool = False) -> ExperimentResult:
     """Run a single experiment against a single covenant.
 
     If `adapter` is provided, reuses it (preserving the coin pool).
     Otherwise creates and sets up a fresh adapter.
+
+    Console output is compact by default (one-line summary per experiment).
+    Use verbose=True for full observation dump.
     """
     spec = get_experiment(name)
     if spec is None:
@@ -242,38 +314,75 @@ def run_experiment(name: str, covenant: str, rpc: RegTestRPC,
         adapter = get_adapter(covenant)
         adapter.setup(rpc)
 
-    print(f"\n{'='*60}")
-    print(f"Experiment: {spec.name}")
-    print(f"Covenant:   {adapter.name} — {adapter.description}")
-    print(f"{'='*60}")
+    # Show a spinner while the experiment runs
+    cov_upper = adapter.name.upper()
+    spinner = _Spinner(f"{cov_upper} | {spec.name} ...")
+    spinner.start()
+    try:
+        result = spec.run_fn(adapter)
+    finally:
+        spinner.stop()
 
-    result = spec.run_fn(adapter)
-
-    # Print observations
-    for obs in result.observations:
-        print(f"  {obs}")
+    # ── Console output ─────────────────────────────────────────
+    cov_label = _cyan(adapter.name.upper().ljust(11))
+    exp_label = _bold(spec.name.ljust(32))
 
     if result.error:
-        print(f"\n  ERROR: {result.error}")
+        status = _red("FAIL")
+        print(f"  {cov_label} {_dim('│')} {exp_label} {_dim('│')} {status} {_dim('│')} {_red(_first_line(result.error))}")
+    elif result.transactions:
+        total_vsize = result.total_vsize()
+        tx_count = len(result.transactions)
+        status = _green("OK  ")
+        print(f"  {cov_label} {_dim('│')} {exp_label} {_dim('│')} {status} {_dim('│')} {tx_count} tx, total={_bold(str(total_vsize)+'vB')}")
+        # Transaction table
+        measured = [(m.label, m.vsize) for m in result.transactions if m.vsize and m.vsize > 0]
+        if measured:
+            max_label = max(len(l) for l, _ in measured)
+            for label, vsize in measured:
+                print(f"             {_dim('│')}   {_dim(f'{label:<{max_label}}')}  {_magenta(f'{vsize:>6}')} {_dim('vB')}")
+    else:
+        first_obs = result.observations[0] if result.observations else ""
+        if "skip" in first_obs.lower():
+            status = _yellow("SKIP")
+            print(f"  {cov_label} {_dim('│')} {exp_label} {_dim('│')} {status} {_dim('│')}")
+        else:
+            n_obs = len(result.observations)
+            status = _green("OK  ")
+            print(f"  {cov_label} {_dim('│')} {exp_label} {_dim('│')} {status} {_dim('│')} {n_obs} observations")
 
-    # Print metrics summary
-    if result.transactions:
-        print(f"\n  --- Transaction Metrics ---")
-        for m in result.transactions:
-            parts = [f"  {m.label}:"]
-            if m.vsize:
-                parts.append(f"vsize={m.vsize}")
-            if m.weight:
-                parts.append(f"weight={m.weight}")
-            if m.fee_sats is not None:
-                parts.append(f"fee={m.fee_sats} sats")
-            if m.num_inputs is not None:
-                parts.append(f"inputs={m.num_inputs}")
-            if m.num_outputs is not None:
-                parts.append(f"outputs={m.num_outputs}")
-            print(" ".join(parts))
+    # ── Findings ──────────────────────────────────────────────
+    _NOISE = (
+        "=== Regtest", "VALIDITY SCOPE:", "(1) NO MEMPOOL", "(2) NO RELAY",
+        "(3) NO FEE MARKET", "(4) MINING IS INSTANT", "METHODOLOGY: We treat",
+        "EXPERIMENT-SPECIFIC:", "PRIOR ART:", "--- Fee Sensitivity:",
+        "All costs below are vsize", "Skipping", "NOTE:",
+        "FORWARD-LOOKING", "WARNING: Could not measure",
+    )
+
+    printable = [
+        obs for obs in result.observations
+        if obs.strip() and not any(obs.strip().startswith(m) for m in _NOISE)
+    ]
+
+    if verbose:
+        for obs in result.observations:
+            if obs.strip():
+                print(f"             {_dim(':')}  {_dim(obs)}")
+    elif len(printable) <= 25:
+        for obs in printable:
+            print(f"             {_dim(':')}  {_dim(obs)}")
 
     return result
+
+
+def _first_line(s: str) -> str:
+    """Extract the first meaningful line from an error string."""
+    for line in s.strip().splitlines():
+        line = line.strip()
+        if line:
+            return line[:80]
+    return s[:80]
 
 
 def cmd_init(args):
@@ -307,7 +416,8 @@ def cmd_run(args):
     if the node is already running.
 
     When --covenant all, runs experiments on CTV first (Inquisition),
-    then CCV (Merkleize), then OP_VAULT (opvault branch), then CAT+CSFS (Inquisition).
+    then CCV (Merkleize), then OP_VAULT (opvault branch), then CAT+CSFS
+    (Inquisition), then Simplicity (Elements + electrs).
     --covenant both is a legacy alias that runs CTV + CCV only.
     """
     # Determine which experiments to run
@@ -329,7 +439,7 @@ def cmd_run(args):
 
     # Determine covenants
     if args.covenant in ("all", "all_covenants"):
-        covenants = ["ctv", "ccv", "opvault", "cat_csfs"]
+        covenants = ["ctv", "ccv", "opvault", "cat_csfs", "simplicity"]
     elif args.covenant == "both":
         covenants = ["ctv", "ccv"]
     else:
@@ -343,7 +453,13 @@ def cmd_run(args):
     for cov in covenants:
         if args.no_switch:
             # Manual mode: assume correct node is already running
-            rpc = connect_rpc()
+            if cov == "simplicity":
+                from adapters.simplicity_adapter import discover_simplex_ports
+                rpc_port, _, rpc_user, rpc_pass = discover_simplex_ports()
+                rpc = RegTestRPC(host="127.0.0.1", port=rpc_port,
+                                 user=rpc_user, password=rpc_pass)
+            else:
+                rpc = connect_rpc()
         else:
             # Auto mode: switch node + init regtest
             rpc = switch_and_init(cov, blocks=args.blocks)
@@ -362,17 +478,25 @@ def cmd_run(args):
         if getattr(args, "max_splits", None):
             adapter.max_splits = args.max_splits
 
+        verbose = getattr(args, "verbose", False)
+        print(f"\n  {_dim('─'*70)}")
+        print(f"  {_bold(_cyan(cov.upper()))} {_dim('—')} {adapter.description}")
+        print(f"  {_dim('─'*70)}")
+
         for exp_name in experiments:
             if exp_name not in all_results:
                 all_results[exp_name] = {}
 
-            print(f"\nRunning {exp_name} on {cov}...")
             try:
-                result = run_experiment(exp_name, cov, rpc, adapter=adapter)
+                result = run_experiment(
+                    exp_name, cov, rpc, adapter=adapter, verbose=verbose
+                )
                 all_results[exp_name][cov] = result
                 reporter.save_result(result)
             except Exception as e:
-                print(f"FAILED to run {exp_name} on {cov}: {e}")
+                cov_label = _cyan(cov.upper().ljust(11))
+                exp_label = _bold(exp_name.ljust(32))
+                print(f"  {cov_label} {_dim('│')} {exp_label} {_dim('│')} {_red('CRASH')} {_dim('│')} {_red(str(e)[:60])}")
                 err_result = ExperimentResult(
                     experiment=exp_name, covenant=cov, params={}
                 )
@@ -418,7 +542,7 @@ def cmd_run(args):
             )
             reporter.save_sweep(exp_name, "comparison", comp_table, comp_csv)
 
-    print(f"\nResults saved to: {reporter.run_dir}")
+    print(f"\n{_green('Results saved to:')} {reporter.run_dir}")
 
 
 def cmd_compare(args):
@@ -453,7 +577,7 @@ def cmd_compare(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Vault Comparison Runner — CTV vs CCV vs OP_VAULT vs CAT+CSFS experiments",
+        description="Vault Comparison Runner — CTV vs CCV vs OP_VAULT vs CAT+CSFS vs Simplicity experiments",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -473,10 +597,11 @@ def main():
     sub_run = subparsers.add_parser("run", help="Run experiments")
     sub_run.add_argument("experiment", nargs="?", help="Experiment name")
     sub_run.add_argument("--covenant", choices=["ctv", "ccv", "opvault", "cat_csfs",
+                                                "simplicity",
                                                 "both", "all", "all_covenants"],
                          default="ctv",
                          help="Which covenant to test (default: ctv). "
-                              "'all' runs CTV, CCV, OP_VAULT, and CAT+CSFS. "
+                              "'all' runs CTV, CCV, OP_VAULT, CAT+CSFS, and Simplicity. "
                               "'both' is a legacy alias for CTV+CCV only.")
     sub_run.add_argument("--tag", help="Run all experiments with this tag")
     sub_run.add_argument("--all", action="store_true", help="Run all experiments")
@@ -493,6 +618,8 @@ def main():
     sub_run.add_argument("--max-splits", type=int, default=None,
                          help="Max splitting rounds for watchtower_exhaustion "
                               "(default: 50)")
+    sub_run.add_argument("-v", "--verbose", action="store_true",
+                         help="Print full observations and metrics (default: compact)")
     sub_run.set_defaults(func=cmd_run)
 
     # compare
