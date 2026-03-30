@@ -28,7 +28,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv (fast Python package manager)
-RUN pip3 install --no-cache-dir uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
 
 # ── Stage 2: Bitcoin Inquisition (CTV) ──────────────────────
 FROM base AS build-inquisition
@@ -132,7 +133,7 @@ RUN sed -i '1s/^/openssl_conf = openssl_init\n/' /etc/ssl/openssl.cnf \
 # Install Python dependencies via uv (cached at build time so runtime is fast)
 RUN cd vault-comparison && uv sync --extra all \
     && cd ../pymatt && uv sync --extra examples \
-    && pip3 install --no-cache-dir -r ../simple-op-vault/requirements.txt
+    && pip3 install --no-cache-dir --break-system-packages -r ../simple-op-vault/requirements.txt
 
 # Write pymatt .env for RPC
 RUN printf 'RPC_HOST=localhost\nRPC_USER=rpcuser\nRPC_PASSWORD=rpcpass\nRPC_PORT=18443\n' > pymatt/.env
