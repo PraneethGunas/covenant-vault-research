@@ -76,7 +76,7 @@ BYPASS_MODES = [3, 4, 7, 128, 255]
 @register(
     name="ccv_mode_bypass",
     description="CCV mode bypass: OP_SUCCESS developer footgun on production-shaped vault taptree",
-    tags=["ccv_only", "security", "developer_footguns"],
+    tags=["ccv_only", "verification", "developer_footguns"],
     required_covenants=["ccv"],
 )
 def run(adapter: VaultAdapter) -> ExperimentResult:

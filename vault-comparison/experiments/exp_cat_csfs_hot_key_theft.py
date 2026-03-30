@@ -74,8 +74,8 @@ VAULT_AMOUNT = 49_999_900
 
 @register(
     name="cat_csfs_hot_key_theft",
-    description="CAT+CSFS hot key theft: output redirection attempt via CSFS bypass",
-    tags=["cat_csfs_only", "security", "critical"],
+    description="CAT+CSFS hot key theft: empirical verification of dual-verification output binding",
+    tags=["cat_csfs_only", "verification"],
     required_covenants=["cat_csfs"],
 )
 def run(adapter: VaultAdapter) -> ExperimentResult:

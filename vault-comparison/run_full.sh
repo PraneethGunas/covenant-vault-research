@@ -4,7 +4,7 @@
 # Usage:  ./run_full.sh
 #
 # What it does:
-#   1. Runs all 16 experiments on CTV, CCV, OP_VAULT, and CAT+CSFS (auto-switches nodes)
+#   1. Runs all 15 experiments on CTV, CCV, OP_VAULT, CAT+CSFS, and Simplicity (auto-switches nodes)
 #   2. Generates comparison JSONs for each experiment
 #   3. Produces a consolidated full_analysis.md report
 

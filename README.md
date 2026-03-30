@@ -28,7 +28,7 @@ research experiments/
 │   ├── config.toml           # Tunable parameters (fee rates, paths, delays)
 │   ├── harness/              # Shared infra (RPC, metrics, reporting, logging, coin pool)
 │   ├── adapters/             # Vault drivers (CTV, CCV, OP_VAULT, CAT+CSFS, Simplicity)
-│   ├── experiments/          # Experiment modules (16 experiments)
+│   ├── experiments/          # Experiment modules (15 experiments)
 │   ├── tests/                # Unit tests (pytest) and integration tests
 │   └── results/              # Timestamped output (gitignored)
 ├── formalization/             # Alloy models for covenant properties
@@ -156,35 +156,35 @@ uv run run.py compare results/<timestamp_directory>
 
 ## Experiments
 
-The framework includes 16 experiments organized by scope category.
+The framework includes 15 experiments organized by scope category.
 
 ### Category Taxonomy
 
 - **Comparative** — Same test across covenants; finding comes from the difference
 - **Capability gap** — Feature that some covenants support and others cannot
-- **Covenant-specific** — Tests semantics unique to one covenant design
+- **Covenant-specific** — Measures economic costs of design tradeoffs unique to one covenant
+- **Verification** — Empirically confirms specified opcode/cryptographic behavior holds in implementation
 - **Analytical** — Fee projections and sensitivity analysis (no node required)
 
 ### Experiment Catalog
 
 | # | Name | Covenants | Category | Description |
 |---|------|-----------|----------|-------------|
-| A | `lifecycle_costs` | CTV, CCV, OPV, CAT | Comparative | Full vault lifecycle transaction sizes and fees |
-| B | `address_reuse` | CTV, CCV, OPV, CAT | Comparative | Second-deposit safety: stuck funds (CTV) vs safe re-funding (CCV, OPV, CAT) |
-| C | `fee_pinning` | CTV, CCV, OPV, CAT | Comparative | Fee mechanism and descendant-chain pinning surface |
+| A | `lifecycle_costs` | CTV, CCV, OPV, CAT, SIM | Comparative | Full vault lifecycle transaction sizes and fees |
+| B | `address_reuse` | CTV, CCV, OPV, CAT, SIM | Comparative | Second-deposit safety: stuck funds (CTV) vs safe re-funding |
+| C | `fee_pinning` | CTV, CCV, OPV, CAT, SIM | Comparative | Fee mechanism and descendant-chain pinning surface |
 | D | `revault_amplification` | CCV, OPV | Capability gap | Partial withdrawal chaining and cost accumulation |
-| E | `multi_input` | CTV, CCV, OPV, CAT | Capability gap | Batched trigger efficiency and cross-input accounting |
-| F | `recovery_griefing` | CTV, CCV, OPV, CAT | Comparative | Forced-recovery griefing: four-way asymmetric cost analysis |
-| G | `ccv_edge_cases` | CCV | CCV-only | Mode confusion, keypath bypass, sentinel values |
-| H | `watchtower_exhaustion` | CCV, OPV | Security | Revault-splitting watchtower fee exhaustion attack |
-| I | `ccv_mode_bypass` | CCV | CCV-only | Production-shaped vault UTXO theft via OP_SUCCESS on undefined CCV modes |
-| J | `fee_sensitivity` | All (analytical) | Analytical | Four-way fee environment sensitivity projections |
-| K | `opvault_recovery_auth` | OPV | OP_VAULT-specific | Authorized recovery as defense and attack surface |
-| L | `opvault_trigger_key_theft` | OPV | OP_VAULT-specific | Trigger key theft: attacker vs watchtower recovery race |
-| M | `cat_csfs_hot_key_theft` | CAT | CAT+CSFS-only | Hot key compromise: griefing-only, no theft path |
-| N | `cat_csfs_witness_manipulation` | CAT | CAT+CSFS-only | Witness tampering against OP_CAT+CSFS introspection |
-| O | `cat_csfs_destination_lock` | CAT | CAT+CSFS-only | Destination address locking via embedded commitments |
-| P | `cat_csfs_cold_key_recovery` | CAT | CAT+CSFS-only | Unconstrained cold key recovery: defense and risk |
+| E | `multi_input` | CTV, CCV, OPV, CAT, SIM | Capability gap | Batched trigger efficiency and cross-input accounting |
+| F | `recovery_griefing` | CTV, CCV, OPV, CAT, SIM | Comparative | Forced-recovery griefing: asymmetric cost analysis |
+| H | `watchtower_exhaustion` | CCV, OPV | Comparative | Revault-splitting watchtower fee exhaustion |
+| I | `ccv_mode_bypass` | CCV | Verification | BIP-443 OP_SUCCESS behavior on production vault taptrees |
+| J | `fee_sensitivity` | All (analytical) | Analytical | Fee environment sensitivity projections |
+| K | `opvault_recovery_auth` | OPV | Covenant-specific | Authorized recovery cost and anti-griefing tradeoff |
+| L | `opvault_trigger_key_theft` | OPV | Covenant-specific | Trigger key compromise and recovery race economics |
+| M | `cat_csfs_hot_key_theft` | CAT | Verification | Dual-verification output binding holds under hot key compromise |
+| N | `cat_csfs_witness_manipulation` | CAT | Verification | Sighash-preimage tamper resistance across 3 tampering vectors |
+| O | `cat_csfs_destination_lock` | CAT | Covenant-specific | Destination rigidity cost and recovery escape hatch |
+| P | `cat_csfs_cold_key_recovery` | CAT | Covenant-specific | Unconstrained cold key recovery: cost and alternative design |
 
 ### Key Security Findings
 

@@ -174,10 +174,6 @@ CTV's inability to batch triggers follows from [BIP-119](https://bips.dev/119/)'
 
 Keyless recovery griefing is identified by Ingala ([Ing23](https://bips.dev/443/), bitcoin-dev mailing list) as an inherent property of CCV's permissionless recovery design. The vault custody threat model follows Swambo et al. [SHMB20](https://arxiv.org/abs/2005.11776). This experiment measures the vsize asymmetry between trigger (154 vB) and recovery (122 vB) transactions, simulates a 10-round griefing loop, and compares the CCV griefing surface (keyless, wider, liveness-only) with the CTV analog (hot-key sweep, narrower, escalates to fund theft via fee pinning).
 
-### G. ccv_edge_cases
-
-The OP_SUCCESS semantics for undefined CCV flags are a deliberate consensus design choice for forward compatibility, specified in [BIP-443](https://bips.dev/443/). Mode confusion risk is discussed by Ingala ([Ing23](https://gnusha.org/pi/bitcoindev/CAMhCMoFYF+9NL1sqKfn=ma3C_mfQv7mj2fqbqO5WXVwd6vyhLw@mail.gmail.com/)). Keypath bypass is inherent to Taproot (BIP-341), not CCV-specific. This experiment constructs P2TR outputs with undefined CCV flag bytes (4, 7, 128, 255), funds them on regtest, and confirms spends succeed unconditionally via OP_SUCCESS. See also experiment I (ccv_mode_bypass) for the production-vault escalation.
-
 ### H. watchtower_exhaustion
 
 The revault splitting attack originates with halseth in the OP_VAULT discussion, with quantitative estimates by Harding [Har24](https://delvingbitcoin.org/t/op-vault-comments/521) (~3,000 chunks per block, ~0.3 BTC watchtower reserve). CTV's immunity to this attack (all-or-nothing unvault) is noted in [OS23](https://bips.dev/345/). This experiment empirically tests Harding's estimates against measured CCV transaction sizes, extends the analysis with variable withdrawal fractions (dust through 50% of balance), quantifies batched recovery savings (~45% at 100 inputs), and identifies the fee-dependent crossover at which the attack shifts from infeasible to viable.
@@ -234,7 +230,7 @@ This work provides an empirical comparison framework for CTV ([BIP-119](https://
 
 **What the framework contributes:**
 
-1. The first four-way empirical comparison — regtest-measured transaction sizes for CTV, CCV, OP_VAULT, and CAT+CSFS (16 experiments, structured threat models) under a uniform adapter interface. OP_VAULT measurements revealed the fee-input overhead (all non-deposit txs +80–90 vB vs estimates), correcting prior hand-estimates.
+1. The first four-way empirical comparison — regtest-measured transaction sizes for CTV, CCV, OP_VAULT, and CAT+CSFS (15 experiments, structured threat models) under a uniform adapter interface. OP_VAULT measurements revealed the fee-input overhead (all non-deposit txs +80–90 vB vs estimates), correcting prior hand-estimates.
 
 2. Fee-dependent inversion of security rankings — the cross-experiment fee sensitivity synthesis (experiment J) shows that the relative security ordering of vault designs flips depending on fee environment. In low-fee regimes, CCV/OP_VAULT are safer (splitting is infeasible); in high-fee regimes, watchtower exhaustion becomes feasible while CTV's fee pinning cost remains negligible. No prior analysis has demonstrated this crossover.
 

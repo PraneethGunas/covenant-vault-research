@@ -211,8 +211,7 @@ _SECURITY_EXPERIMENTS = [
     ("recovery_griefing", "Recovery Griefing (TM2)", "Forced-recovery cost asymmetry"),
     ("watchtower_exhaustion", "Watchtower Exhaustion (TM4)", "Splitting attack on revault-capable vaults"),
     ("address_reuse", "Address Reuse (TM7)", "Second deposit to same vault address"),
-    ("ccv_edge_cases", "CCV Edge Cases (TM5)", "Mode confusion, keypath bypass, sentinel values"),
-    ("ccv_mode_bypass", "CCV Mode Bypass (TM8)", "Full vault theft via OP_SUCCESS on undefined CCV modes"),
+    ("ccv_mode_bypass", "CCV Mode Bypass (TM8)", "Empirical verification of BIP-443 OP_SUCCESS behavior on vault taptrees"),
     ("opvault_recovery_auth", "OP_VAULT Recovery Auth", "Authorized recovery as defense and attack surface"),
     ("opvault_trigger_key_theft", "OP_VAULT Trigger Key Theft", "Trigger key compromise and recovery race"),
 ]

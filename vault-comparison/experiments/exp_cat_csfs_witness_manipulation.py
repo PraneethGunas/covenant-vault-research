@@ -71,8 +71,8 @@ VAULT_AMOUNT = 49_999_900
 
 @register(
     name="cat_csfs_witness_manipulation",
-    description="CAT+CSFS witness manipulation: preimage forgery resistance under dual-verification",
-    tags=["cat_csfs_only", "security", "critical"],
+    description="CAT+CSFS witness manipulation: empirical verification of sighash-preimage tamper resistance",
+    tags=["cat_csfs_only", "verification"],
     required_covenants=["cat_csfs"],
 )
 def run(adapter: VaultAdapter) -> ExperimentResult:

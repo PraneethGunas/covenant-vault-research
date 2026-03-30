@@ -13,7 +13,7 @@ def _ensure_experiments_loaded():
     import experiments.exp_revault_amplification  # noqa: F401
     import experiments.exp_multi_input  # noqa: F401
     import experiments.exp_recovery_griefing  # noqa: F401
-    import experiments.exp_ccv_edge_cases  # noqa: F401
+    # exp_ccv_edge_cases removed — subsumed by exp_ccv_mode_bypass
     import experiments.exp_watchtower_exhaustion  # noqa: F401
     import experiments.exp_fee_sensitivity  # noqa: F401
     import experiments.exp_opvault_recovery_auth  # noqa: F401
@@ -86,8 +86,8 @@ def test_core_experiments_present():
 
 
 def test_experiment_count():
-    """Verify we have the expected 16 experiments."""
+    """Verify we have the expected 15 experiments."""
     _ensure_experiments_loaded()
-    assert len(EXPERIMENTS) == 16, (
-        f"Expected 16 experiments, got {len(EXPERIMENTS)}: {sorted(EXPERIMENTS.keys())}"
+    assert len(EXPERIMENTS) == 15, (
+        f"Expected 15 experiments, got {len(EXPERIMENTS)}: {sorted(EXPERIMENTS.keys())}"
     )

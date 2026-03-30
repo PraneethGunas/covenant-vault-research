@@ -33,7 +33,7 @@ The vault lifecycle model and threat vocabulary follow Swambo et al. ([arXiv 200
 
 The conceptual contribution is a *unified measurement framework* that reveals how design-level tradeoffs compose under realistic fee environments. Specifically:
 
-1. **The first four-way empirical comparison.** Regtest-measured transaction sizes for CTV, CCV, OP_VAULT, and CAT+CSFS under a uniform adapter interface (16 experiments, 11 threat models). Prior analysis compared at most two designs, or used estimates rather than measured values. The OP_VAULT vsize measurements reveal the fee-input overhead: all non-deposit transactions are 80–90 vB larger than expected (§4.2), making OP_VAULT's lifecycle 36% more expensive than CCV's.
+1. **The first four-way empirical comparison.** Regtest-measured transaction sizes for CTV, CCV, OP_VAULT, and CAT+CSFS under a uniform adapter interface (15 experiments, 11 threat models). Prior analysis compared at most two designs, or used estimates rather than measured values. The OP_VAULT vsize measurements reveal the fee-input overhead: all non-deposit transactions are 80–90 vB larger than expected (§4.2), making OP_VAULT's lifecycle 36% more expensive than CCV's.
 
 2. **Fee-dependent inversion of security rankings.** The cross-experiment fee sensitivity synthesis (experiment J) shows that the *relative* security ordering of vault designs flips depending on fee environment. In low-fee regimes (1–10 sat/vB), CCV and OP_VAULT are safer than CTV (fee pinning is cheap but splitting is infeasible). In high-fee regimes (100–500 sat/vB), watchtower exhaustion becomes feasible against CCV/OP_VAULT while CTV's fee pinning cost remains negligible — the security ordering inverts. This fee-dependent crossover is the strongest finding: no prior analysis has shown that the answer to "which vault is safest?" depends on the fee environment.
 
@@ -299,7 +299,7 @@ Experiments are classified along two orthogonal axes: **scope** (which covenants
 **Scope tags:**
 - `comparative` — True head-to-head comparison. Runs the same test on all four covenants, and the finding comes from the difference in outcomes. (lifecycle_costs, address_reuse, fee_pinning, recovery_griefing)
 - `capability_gap` — Demonstrates a capability some covenants have that others lack. (multi_input, revault_amplification)
-- `ccv_only` — Only runs on CCV. Tests CCV-specific semantics or developer footguns with no analog in other designs. (ccv_edge_cases, ccv_mode_bypass)
+- `ccv_only` — Only runs on CCV. Tests CCV-specific semantics or developer footguns with no analog in other designs. (ccv_mode_bypass)
 - `opvault_specific` — Only runs on OP_VAULT. Tests OP_VAULT-specific key management and authorized recovery. (opvault_recovery_auth, opvault_trigger_key_theft)
 - `cat_csfs_only` — Only runs on CAT+CSFS. Tests dual-verification properties, witness manipulation, destination locking, and unconstrained recovery. (cat_csfs_hot_key_theft, cat_csfs_witness_manipulation, cat_csfs_destination_lock, cat_csfs_cold_key_recovery)
 
@@ -307,7 +307,8 @@ There are currently no CTV-only experiments. CTV's weaknesses (stuck funds, fee 
 
 **Concern tags:**
 - `quantitative` — Collects TxMetrics (vsize, weight, fee). Not every experiment needs cost metrics; only those where cost is part of the finding. (lifecycle_costs, multi_input, revault_amplification, recovery_griefing)
-- `security` — Probes attack surfaces, blast radii, or exploit conditions. (fee_pinning, recovery_griefing, ccv_edge_cases, address_reuse, watchtower_exhaustion)
+- `security` — Probes attack surfaces, blast radii, or exploit conditions. (fee_pinning, recovery_griefing, address_reuse, watchtower_exhaustion)
+- `verification` — Empirically confirms that specified opcode/cryptographic behavior holds in implementation. Outcomes are predetermined by the spec; value is in confirmation, not discovery. (ccv_mode_bypass, cat_csfs_hot_key_theft, cat_csfs_witness_manipulation)
 
 **Cost measurement rationale:** `lifecycle_costs` is the dedicated cost baseline — it measures the standard deposit→unvault→withdraw path on both covenants. Other experiments collect cost metrics only when cost is *part of the specific finding* (e.g., revault_amplification measures how costs accumulate across chained partial withdrawals; multi_input measures batching savings). Experiments like address_reuse and fee_pinning are behavioral — their findings are about stuck funds and pinning surfaces, not vsize. Bolting cost metrics onto every experiment would add noise without adding signal.
 
@@ -374,7 +375,6 @@ All experiments run on Bitcoin Core regtest.  This is a deliberate methodologica
 | recovery_griefing | vsize asymmetry valid; front-running untested | Mempool race is argued, not demonstrated |
 | multi_input | vsize/weight scaling fully valid | Fee amounts are artifacts |
 | revault_amplification | vsize/weight fully valid | Fee amounts are artifacts |
-| ccv_edge_cases | Fully valid (consensus-level script semantics) | N/A — OP_SUCCESS is not relay-dependent |
 | watchtower_exhaustion | vsize and economic model valid; recovery race untested | Temporal dynamics of sustained splitting |
 | fee_sensitivity | Fully valid (analytical, uses structural vsize) | N/A — does not produce on-chain transactions |
 | cat_csfs_hot_key_theft | Fully valid (consensus-level signature verification) | N/A — dual-verification is consensus |
@@ -456,42 +456,6 @@ Measures the asymmetric cost of forced-recovery griefing attacks on both covenan
 - Cost: One unvault trigger per round. Higher bar than CCV (requires compromised hot key).
 - Escalation: If attacker also has the fee key, griefing escalates to fund theft via descendant-chain pinning (see fee_pinning experiment).
 
-### G. ccv_edge_cases [ccv_only, security]
-Tests three CCV-specific edge cases classified as developer footguns, not adversarial attacks.
-
-**Threat model — mode confusion (CCV) [EMPIRICAL]:**
-- Method: Constructs raw Tapscript leaves with OP_CHECKCONTRACTVERIFY using each flag value (0, 1, 2, 3, 4, 7, 128, 255), funds them into P2TR outputs on regtest, and attempts mutated spends redirecting funds to an attacker address.
-- Defined modes (0, 1, 2): CCV enforces covenant rules — mutated spend is rejected.
-- Undefined modes (3, 4, 7, 128, 255): OP_SUCCESS triggers — script succeeds unconditionally, attacker steals funds.
-- Pseudocode (checkcontractverify.md lines 75–76): `if flags < CCV_FLAG_CHECK_INPUT or flags > CCV_FLAG_DEDUCT_OUTPUT_AMOUNT: return success()`
-- Valid range: [-1, 0, 1, 2]. Everything else → unconditional success.
-- Uses pymatt's StandardAugmentedP2TR + StandardClause with custom CScript to construct each test contract, and ContractManager to fund/spend on regtest.
-- Impact if deployed: An output with an undefined mode has zero covenant enforcement. Anyone can spend it. This is specified BIP-443 behavior for forward compatibility, not a bug — but a developer who accidentally uses an undefined mode value would lose all covenant enforcement. The pymatt library prevents this via named constants; the risk is for developers writing raw CCV scripts.
-- Design tradeoff: OP_SUCCESS enables clean soft-fork upgrades (new flag meanings without hard forks) but creates a silent failure mode for developers.
-
-**Threat model — CCVWildSpend: developer footgun via OP_SUCCESS on undefined modes [TM8]:**
-- Escalation of the mode confusion footgun to a production-shaped vault taptree. Experiment: `exp_ccv_mode_bypass.py` (vault-comparison framework).
-- Construction: A `VulnerableVault` identical to the production `Vault` taptree (trigger + recover leaves), except the recover leaf's CCV uses a mode value outside the defined enumeration {-1, 0, 1, 2}.
-- Consequence: Anyone who can construct the witness path to the poisoned recover leaf can spend the vault UTXO to an arbitrary address. No signature, no output validation, no amount checking.
-- Control: Same vault with `mode=0` rejects the identical spend (CCV checks output scriptPubKey against `recover_pk`).
-- Sweep: All tested undefined modes (3, 4, 7, 128, 255) produce full covenant bypass.
-- **Important framing**: This is **specified consensus behavior** in BIP-443, not a vulnerability. The BIP explicitly states: "Any other value of the mode makes the opcode succeed validation immediately." The OP_SUCCESS semantics are a deliberate forward-compatibility mechanism enabling future soft-fork extensions. No vault developer using the pymatt library would accidentally trigger this — the library exposes named constants (CCV_FLAG_CHECK_INPUT, etc.) that prevent misuse. The risk is for developers writing raw CCV scripts without using the typed API.
-  - BIP-443 defines modes as a discrete enumeration {-1, 0, 1, 2}, not a bitmask — mode 3 is undefined despite appearing to be a bitwise composition of modes 1 and 2.
-  - Realistic footgun paths include: off-by-one (mode=3, one past DEDUCT_OUTPUT_AMOUNT), unsigned cast (−2 → 254), byte truncation in serialization.
-- Distinction from `mode_confusion_attack.py`: That test uses a synthetic `ModeConfusionContract`. This test uses the actual `Vault` taptree structure with only the mode value changed, demonstrating that the behavior affects production-shaped contracts.
-- Prior art: Ingala [Ing23] documented OP_SUCCESS for undefined CCV flags as a deliberate design decision for soft-fork safety. Our contribution is the production-vault taptree escalation, systematic measurement, and the CCVWildSpend transition model as developer education material.
-- Status: **Verified on CCV regtest (2026-02-22).** Control (mode=0) correctly rejected mutated spend. All 5 undefined modes (3, 4, 7, 128, 255) accepted — complete covenant bypass on each. Bypass spend vsize: 110 vB, weight: 438–440. Experiment: `vault-comparison/experiments/exp_ccv_mode_bypass.py`.
-
-**Threat model — keypath bypass (Taproot misconfiguration):**
-- Attacker: Has the private key corresponding to the Taproot internal key. This only exists if the developer passed a real public key as `alternate_pk` instead of using a NUMS point.
-- Goal: Spend vault output via Taproot keypath, bypassing all CCV enforcement.
-- Cost: One keypath spend (~57 vbytes witness). Trivial.
-- Payoff: Full vault balance.
-- Rationality: If the misconfiguration exists, always rational. But the misconfiguration itself is the vulnerability — the pymatt default (`alternate_pk=None`) makes this impossible. This is Taproot security hygiene, not a CCV-specific finding.
-
-**Threat model — sentinel confusion (-1 vs 0):**
-- Not an adversarial attack. Developer error during custom contract authoring. Impact: a clause that skips a check it should perform, or fails when it should succeed. Mitigated by typed APIs and named constants in pymatt.
-
 ### H. watchtower_exhaustion [security, quantitative, revault]
 Tests the revault splitting attack described by halseth in the OP_VAULT discussion: an attacker with the trigger key repeatedly calls trigger_and_revault (CCV) or start_withdrawal with partial amounts (OP_VAULT), creating a cascade of Unvaulting UTXOs that the watchtower must individually recover. Applies to any vault design with revault capability (CCV, OP_VAULT). CTV is immune (no revault).
 
@@ -523,12 +487,12 @@ Tests the revault splitting attack described by halseth in the OP_VAULT discussi
 - Defender response: Same as CCV (batch recoveries, increase spend_delay), plus: if recoveryauth key is compromised, the attacker can ALSO grief the recovery (see TM6 in §4.1).
 - Residual risk: Identical structure to CCV — at high fees, watchtower rationally abandons dust UTXOs. Higher per-recovery cost means the threshold is reached sooner than CCV.
 
-### I. ccv_mode_bypass [ccv_only, security, developer_footguns]
-Escalates the synthetic mode-confusion finding from experiment G to production-shaped vault taptrees. Constructs a `VulnerableVault` with the same taptree structure as pymatt's production `Vault` (trigger + recover leaves), but the recover leaf's CCV uses an undefined mode value outside the defined enumeration {-1, 0, 1, 2}. Documents the CCVWildSpend transition model: vault UTXO → zero typed outputs → funds redirected to attacker-controlled UTXOs. The OP_SUCCESS behavior is **specified consensus behavior** in BIP-443, not a vulnerability — this experiment serves as developer education material. Systematic mode sweep across 5 undefined values (3, 4, 7, 128, 255) confirms all produce complete covenant bypass. See G (ccv_edge_cases) for the full threat model (TM8). Experiment: `exp_ccv_mode_bypass.py`.
+### I. ccv_mode_bypass [ccv_only, verification, developer_footguns]
+Empirical verification that BIP-443's OP_SUCCESS behavior for undefined CCV mode values applies to production-shaped vault taptrees. Constructs a `VulnerableVault` with the same taptree structure as pymatt's production `Vault` (trigger + recover leaves), but the recover leaf's CCV uses a mode value outside the defined enumeration {-1, 0, 1, 2}. The OP_SUCCESS behavior is **specified consensus behavior** in BIP-443: "Any other value of the mode makes the opcode succeed validation immediately." This is a deliberate forward-compatibility mechanism, not a vulnerability. The experiment documents the CCVWildSpend transition model (vault UTXO → zero typed outputs → attacker-controlled UTXOs) as developer education — the pymatt library's typed constants prevent this in practice.
 
-- Prior art: Ingala [Ing23] documented OP_SUCCESS for undefined CCV flags as a deliberate design decision for soft-fork safety. Our contribution is the production-vault taptree escalation, systematic measurement, and the CCVWildSpend transition model as developer education.
-- Key result: All 5 undefined modes produce full covenant bypass. Bypass spend vsize: 110 vB, weight: 438–440.
-- Status: **Verified on CCV regtest (2026-02-22).**
+- Outcome is predetermined by BIP-443. The experiment confirms the spec holds on production-shaped contracts and provides the CCVWildSpend transition model for developer documentation.
+- Sweep: 5 undefined modes (3, 4, 7, 128, 255), all produce covenant bypass. Bypass spend: 110 vB.
+- **Verified on CCV regtest (2026-02-22).**
 
 ### J. fee_sensitivity [analytical, quantitative, fee_management]
 Synthesizes structural vsize measurements from ALL experiments (CTV, CCV, OP_VAULT) and computes economic costs, attack rationality thresholds, and crossover points across 6 historical Bitcoin fee environments (1, 10, 50, 100, 300, 500 sat/vB).
@@ -575,26 +539,20 @@ Demonstrates trigger key compromise: attacker calls start_withdrawal() with atta
 - Defender response: Rotate vault to new config with fresh keys. While the attack persists, funds accumulate at the recovery address — safe but inaccessible via normal withdrawal.
 - Residual risk: Funds are safe but locked in a trigger→recover cycle until the attacker stops or the owner rotates. The cost projection for sustained attack: at 50 sat/vB, each cycle costs the attacker 538 × 50 = 26,900 sats.
 
-### M. cat_csfs_hot_key_theft [cat_csfs_only, security, critical]
-Tests whether a compromised hot key can redirect vault funds in the CAT+CSFS design. Phase 1 performs a normal trigger as control (measures trigger vsize: 221 vB). Phase 2 constructs a trigger transaction with the output redirected to an attacker address, signs with the hot key, and broadcasts — REJECTED by consensus ("Invalid Schnorr signature") because the attacker's output doesn't match the embedded `sha_single_output`. Phase 3 analyzes extra output injection via SIGHASH_SINGLE (additional outputs possible but covenant output is locked). Phase 4 provides a four-way severity comparison.
+### M. cat_csfs_hot_key_theft [cat_csfs_only, verification]
+Empirical verification that the dual CSFS+CHECKSIG verification prevents hot-key output redirection. Phase 1 performs a normal trigger as control (221 vB). Phase 2 constructs a trigger with the output redirected to an attacker address — rejected by consensus because the sighash diverges from the embedded `sha_single_output`. Phase 3 analyzes SIGHASH_SINGLE output injection. Phase 4 provides a four-way severity comparison.
 
-**Threat model — hot key theft (CAT+CSFS) [TM9]:**
-- Attacker: Has the hot key. Cannot modify the script (sha_single_output is embedded at vault creation).
-- Goal: Redirect vault funds to an attacker-controlled address.
-- Result: IMPOSSIBLE. The dual CSFS+CHECKSIG verification binds the output to the pre-committed sha_single_output. Changing the output causes the stack-computed sighash to diverge from the real transaction sighash — one signature check fails.
-- Residual capability: Grief attack only. The attacker can trigger unnecessary unvaults to the vault-loop, but funds remain recoverable by the cold key. The worst single-key outcome for CAT+CSFS is strictly weaker than CCV (where trigger key → withdrawal to attacker address) and OP_VAULT (same, modulo watchtower race).
-- Measured: trigger vsize = 221 vB.
-- Status: **Verified on Inquisition regtest (2026-03-01).** Mutated trigger rejected. Normal trigger accepted.
+The outcome is predetermined by Schnorr signature verification: if the output changes, the real sighash changes, and the same signature cannot satisfy both CSFS and CHECKSIG. The experiment confirms this holds in the CAT+CSFS vault implementation and measures the trigger vsize (221 vB).
 
-### N. cat_csfs_witness_manipulation [cat_csfs_only, security, critical]
-Tests three independent witness-tampering attacks on the CAT+CSFS sighash preimage. Phase 1 is a control (normal trigger accepted). Phases 2–4 each tamper with a specific preimage field: nVersion in the prefix (byte 2: 0x02→0x03), codesep_pos in the suffix (0xFFFFFFFF→0x00000000), and hash_type (0x83→0x01). All three are rejected. Phase 5 performs stack size analysis: prefix=94B, sha_out=32B, suffix=37B, total preimage=163B, with TapSighash tag=227B, limit=520B, headroom=293B.
+- Residual capability: grief attack only (trigger to vault-loop, funds recoverable by cold key).
+- **Verified on Inquisition regtest (2026-03-01).**
 
-**Threat model — witness manipulation (CAT+CSFS) [TM10]:**
-- Attacker: Has the hot key AND can provide arbitrary witness data.
-- Goal: Construct a valid witness that passes both CSFS and CHECKSIG checks but spends to a different output than intended.
-- Result: IMPOSSIBLE. Any byte-level change to the prefix or suffix causes the CSFS-checked sighash to diverge from the CHECKSIG-checked sighash. The embedded sha_single_output is the only invariant — all other fields must match exactly.
-- Stack size analysis: The full preimage (163 bytes) + TapSighash tag prefix (64 bytes) = 227 bytes on the stack before SHA256. This is well within the 520-byte OP_CAT consensus limit with 293 bytes of headroom.
-- Status: **Verified on Inquisition regtest (2026-03-01).** All three tampering vectors rejected.
+### N. cat_csfs_witness_manipulation [cat_csfs_only, verification]
+Empirical verification that the dual CSFS+CHECKSIG pattern is tamper-resistant. Phases 2–4 each modify a specific sighash preimage field: nVersion (prefix byte 2: 0x02→0x03), codesep_pos (suffix: 0xFFFFFFFF→0x00000000), and hash_type (0x83→0x01). All three rejected — any byte change causes the CSFS-checked hash to diverge from the CHECKSIG-checked hash. Phase 5 confirms the assembled preimage (227 bytes including TapSighash tag) fits within the 520-byte OP_CAT consensus limit with 293 bytes of headroom.
+
+The outcome is predetermined by the sighash computation: the dual-verification pattern binds all preimage fields except the embedded constant. The experiment confirms this across three independent tampering vectors and verifies the stack size constraint.
+
+- **Verified on Inquisition regtest (2026-03-01).** 3/3 tampering vectors rejected.
 
 ### O. cat_csfs_destination_lock [cat_csfs_only, security, configuration]
 Tests the unique destination-lock property of CAT+CSFS vaults. Phase 1 verifies that sha_single_output is embedded in the script and that normal withdrawal succeeds (210 vB). Phase 2 attempts withdrawal to an alternative address — REJECTED. Phase 3 measures the recovery escape hatch (125 vB) and calculates the destination rotation cost (~247 vB = recovery + new tovault). Phase 4 provides a four-way flexibility ranking.
