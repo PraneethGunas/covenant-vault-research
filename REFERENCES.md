@@ -51,7 +51,7 @@ BIP text: https://bips.dev/119/
 Defines the CTV opcode. The BIP-119 discussion covers address reuse risks, fee management limitations, and the single-output commitment model.
 
 ### [Poe21] Poelstra — "CAT and Schnorr Tricks"
-Andrew Poelstra. "CAT and Schnorr Tricks I" and "CAT and Schnorr Tricks II." Blockstream Research Blog, October–November 2021.
+Andrew Poelstra. "CAT and Schnorr Tricks I" and "CAT and Schnorr Tricks II." Blockstream Research Blog, January–February 2021.
 Part I: https://blog.blockstream.com/cat-and-schnorr-tricks-i/
 Part II: https://blog.blockstream.com/cat-and-schnorr-tricks-ii/
 Also: https://www.wpsoftware.net/andrew/blog/cat-and-schnorr-tricks-ii.html
@@ -83,6 +83,27 @@ Bitcoin Optech. "Vaults." Topic page (continuously updated).
 URL: https://bitcoinops.org/en/topics/vaults/
 
 Canonical overview resource tracking vault-related developments across BIPs, implementations, and discussion threads. Provides context for BIP-345 withdrawal, CTV+CSFS proposals, and OP_CAT vault prototypes.
+
+### [OC17] O'Connor — "Simplicity: A New Language for Blockchains"
+Russell O'Connor. "Simplicity: A New Language for Blockchains." In *Proceedings of the 2017 ACM SIGSAC Workshop on Programming Languages and Analysis for Security (PLAS '17)*, Dallas, Texas, October 2017, pp. 107–120.
+DOI: [10.1145/3139337.3139340](https://doi.org/10.1145/3139337.3139340)
+arXiv: [1711.03028](https://arxiv.org/abs/1711.03028)
+PDF: https://blockstream.com/simplicity.pdf
+
+The foundational paper defining the Simplicity language: a typed functional language for blockchain consensus based on combinators, with formal denotational semantics and a Coq-verified type system. Introduces the core design: programs as DAGs of combinators, Merkle-root commitment for script hashing, and the Bit Machine for efficient evaluation. The jet mechanism (substituting native implementations for known expression subtrees) is the key enabler for practical execution performance. Our Simplicity vault uses jets for transaction introspection (`jet::outputs_hash()`), signature verification (`jet::bip_0340_verify()`), and timelocks (`jet::check_lock_distance()`).
+
+### [BSR25] Blockstream Research — Simplex SDK
+Blockstream Research. "Simplex: A Development Framework for Simplicity Smart Contracts." GitHub, 2025–2026.
+GitHub: https://github.com/BlockstreamResearch/simplex
+SimplicityHL compiler: https://github.com/BlockstreamResearch/simfony
+
+The Simplex SDK (smplx-std, smplx-sdk, smplx-regtest) provides a Rust development framework for building, testing, and deploying Simplicity programs on Elements/Liquid. Includes a CLI, local regtest environment (`simplex regtest` manages elementsd + electrs), and a signing/provider abstraction layer. SimplicityHL (formerly Simfony) is a Rust-like high-level language that compiles to Simplicity bytecode. Our `simple-simplicity-vault` is built with smplx-std 0.0.2 and SimplicityHL 0.5.0-rc.0.
+
+### [DPNS16] Dilley, Poelstra, Wilkins, Piekarska, Gorlick, Friedenbach — "Strong Federations"
+Johnny Dilley, Andrew Poelstra, Jonathan Wilkins, Marta Piekarska, Ben Gorlick, Mark Friedenbach. "Strong Federations: An Interoperable Blockchain Solution to Centralized Third-Party Risks." December 2016.
+arXiv: [1612.05491](https://arxiv.org/abs/1612.05491)
+
+Describes the federated sidechain model underlying Elements/Liquid: functionary-based block signing, two-way peg via watchmen, and the trust model that distinguishes Elements from Bitcoin's proof-of-work consensus. Relevant context for why Simplicity vault security comparisons require federation trust caveats (DESIGN.md §2.5).
 
 ### Additional references
 
@@ -197,7 +218,7 @@ The unconstrained cold-key recovery (bare OP_CHECKSIG) is the simplest possible 
 
 ## 3. Contribution Summary
 
-This work provides an empirical comparison framework for CTV ([BIP-119](https://bips.dev/119/)), CCV ([BIP-443](https://bips.dev/443/)), OP_VAULT ([BIP-345](https://bips.dev/345/)), and CAT+CSFS ([BIP-347](https://bips.dev/347/) + [BIP-348](https://bips.dev/348/)) vault designs. The threat models and attack vectors tested here originate from the works cited above — the conceptual contribution is measurement and cross-design synthesis, not vulnerability discovery. See `DESIGN.md` §1.1 for the full novelty statement.
+This work provides an empirical comparison framework for CTV ([BIP-119](https://bips.dev/119/)), CCV ([BIP-443](https://bips.dev/443/)), OP_VAULT ([BIP-345](https://bips.dev/345/)), CAT+CSFS ([BIP-347](https://bips.dev/347/) + [BIP-348](https://bips.dev/348/)), and Simplicity vault designs. The first four run on Bitcoin regtest; the Simplicity vault runs on Elements regtest as a reference implementation. The threat models and attack vectors tested here originate from the works cited above — the conceptual contribution is measurement and cross-design synthesis, not vulnerability discovery. See `DESIGN.md` §1.1 for the full novelty statement.
 
 **What prior work established (we quantify, not discover):**
 
@@ -208,6 +229,8 @@ This work provides an empirical comparison framework for CTV ([BIP-119](https://
 - CCV mode confusion with undefined OP_SUCCESS flags: Ingala [Ing23]
 - CAT-based transaction introspection via dual signature verification: Poelstra [Poe21]
 - Recursive staging reset as cold key compromise mitigation: Poelstra [Poe21]
+- Simplicity language and jet-based covenant execution: O'Connor [OC17]
+- Elements/Liquid federated sidechain trust model: Dilley et al. [DPNS16]
 
 **What the framework contributes:**
 
@@ -220,3 +243,5 @@ This work provides an empirical comparison framework for CTV ([BIP-119](https://
 4. Empirical confirmation/correction of prior estimates — For OP_VAULT, we measure 3,427 splits/block (trigger_and_revault weight ~1,168 WU), consistent with Harding's [Har24] ~3,000 estimate. For CCV, the smaller trigger_and_revault transaction (162 vB vs OP_VAULT's 292 vB) yields approximately 6,172 splits/block — roughly 80% more than OP_VAULT, because Harding's analysis assumed OP_VAULT-sized transactions. OP_VAULT hand-estimated vsizes corrected (trigger: 200→292, recovery: 170→246). Parameterized economic models extending [Har24] with variable withdrawal fractions, batched recovery quantification, and spend-delay sensitivity.
 
 5. OP_VAULT deprecation context — BIP-345 was withdrawn [OB25] in favor of CCV (BIP-443). Our comparison quantifies the economic justification: OP_VAULT's fee-input overhead costs 36% more per lifecycle than CCV, and 80-90 vB more per non-deposit transaction.
+
+6. Simplicity vault as cross-chain reference — a fifth vault built with the Simplicity language [OC17] on Elements regtest via the Simplex SDK [BSR25], demonstrating what covenant design looks like with full transaction introspection (`jet::outputs_hash()`) and no soft-fork dependency. Lifecycle vsizes measured (865 vB total), threat model mapped against TM1–TM11. Key finding: Simplicity achieves output-constrained recovery on all paths (matching CCV/OP_VAULT, stronger than CAT+CSFS) but on a federated sidechain with fundamentally different trust assumptions.
