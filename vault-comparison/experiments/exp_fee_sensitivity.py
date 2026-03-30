@@ -371,7 +371,7 @@ def _section_fee_pinning(result):
     )
 
     result.observe(f"\nAttack structure: {FEE_PIN_CHAIN_COUNT - 1} descendant txs × {FEE_PIN_DESCENDANT_VSIZE} vB = {FEE_PIN_TOTAL_CHAIN_VSIZE} vB total")
-    result.observe(f"Defender recovery: {CTV_TOCOLD_VSIZE} vB (cold sweep)")
+    result.observe("Defender response: none — CPFP is rejected while descendant chain is full")
     result.observe(f"Vault value at stake: {_fmt_sats(VAULT_AMOUNT_SATS)} sats (~{VAULT_AMOUNT_BTC:.2f} BTC)")
 
     # Capital cost includes dust outputs in the chain
@@ -395,13 +395,11 @@ def _section_fee_pinning(result):
         )
 
     result.observe(
-        "\nKEY FINDING: Fee pinning becomes MORE dangerous in high-fee "
-        "environments, not less.  The attack cost rises linearly, but "
-        "the defender's inability to fee-bump the pinned tocold is WORSE "
-        "when block space is congested.  At 500 sat/vB, the attack costs "
-        f"{_fmt_sats(FEE_PIN_TOTAL_CHAIN_VSIZE * 500)} sats "
-        f"({FEE_PIN_TOTAL_CHAIN_VSIZE * 500 / VAULT_AMOUNT_SATS * 100:.3f}% of vault) — "
-        "trivially rational for any attacker who also holds the hot key."
+        "\nKEY FINDING: Fee pinning is economically rational at every "
+        "historical fee rate. The attack cost stays under 3% of vault "
+        "value even at 500 sat/vB. No defense exists within the CTV "
+        "vault design — the descendant chain blocks all CPFP attempts. "
+        "TRUC/v3 transaction adoption would eliminate this vector entirely."
     )
 
     # Crossover: When does the attack cost exceed vault value?
