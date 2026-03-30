@@ -1,12 +1,12 @@
 # Empirical Comparison of Bitcoin Covenant Vault Designs
 
-Comparative analysis framework for CTV (BIP-119), CCV (BIP-443), OP_VAULT (BIP-345), and CAT+CSFS (BIP-347 + BIP-348) vault implementations on Bitcoin regtest.
+Comparative analysis framework for CTV (BIP-119), CCV (BIP-443), OP_VAULT (BIP-345), CAT+CSFS (BIP-347 + BIP-348), and Simplicity vault implementations. The first four run on Bitcoin regtest; the Simplicity vault runs on Elements regtest.
 
 ## Overview
 
 This framework runs side-by-side experiments against four covenant vault implementations, measuring transaction costs, security properties, and capability differences. Each experiment produces on-chain measurements from regtest, not simulated or estimated values.
 
-The four covenant proposals represent fundamentally different design philosophies for Bitcoin vaults: CTV commits to exact transaction templates at vault creation; CCV enforces contract rules dynamically at spend time; OP_VAULT provides purpose-built vault opcodes with authorized recovery and dynamic withdrawal targets; CAT+CSFS uses generic stack introspection (OP_CAT) with signature-from-stack verification (OP_CHECKSIGFROMSTACK) to enforce vault transitions via dual-key signing.
+The four Bitcoin covenant proposals represent fundamentally different design philosophies: CTV commits to exact transaction templates at vault creation; CCV enforces contract rules dynamically at spend time; OP_VAULT provides purpose-built vault opcodes with authorized recovery and dynamic withdrawal targets; CAT+CSFS uses generic stack introspection (OP_CAT) with signature-from-stack verification (OP_CHECKSIGFROMSTACK) to enforce vault transitions via dual-key signing. A fifth vault, built with Simplicity on Elements, serves as a reference for what covenant design looks like with full transaction introspection and no soft-fork dependency.
 
 ## Repository Layout
 
@@ -19,7 +19,7 @@ research experiments/
 ├── docker-compose.yml        # Single-command experiment runner
 ├── Makefile                  # Build/run/test/analyze shortcuts
 ├── entrypoint.sh             # Docker entrypoint with --help
-├── switch-node.sh            # Node manager (Inquisition / CCV / OP_VAULT)
+├── switch-node.sh            # Node manager (Inquisition / CCV / OP_VAULT / Elements)
 ├── vault-comparison/         # Framework source
 │   ├── run.py                # CLI runner
 │   ├── run_full.sh           # Full pipeline (run all → analyze)
@@ -27,7 +27,7 @@ research experiments/
 │   ├── config.py             # Centralized configuration (FeeConstants, FrameworkConfig)
 │   ├── config.toml           # Tunable parameters (fee rates, paths, delays)
 │   ├── harness/              # Shared infra (RPC, metrics, reporting, logging, coin pool)
-│   ├── adapters/             # Vault drivers (CTV, CCV, OP_VAULT, CAT+CSFS)
+│   ├── adapters/             # Vault drivers (CTV, CCV, OP_VAULT, CAT+CSFS, Simplicity)
 │   ├── experiments/          # Experiment modules (16 experiments)
 │   ├── tests/                # Unit tests (pytest) and integration tests
 │   └── results/              # Timestamped output (gitignored)
@@ -37,7 +37,8 @@ research experiments/
 ├── simple-ctv-vault/         # CTV vault (upstream clone)
 ├── simple-cat-csfs-vault/    # CAT+CSFS vault (custom implementation)
 ├── pymatt/                   # CCV vault (upstream clone)
-└── simple-op-vault/          # OP_VAULT demo (upstream clone)
+├── simple-op-vault/          # OP_VAULT demo (upstream clone)
+└── simple-simplicity-vault/  # Simplicity vault (Elements regtest)
 ```
 
 ## Quick Start (Docker)
@@ -93,7 +94,7 @@ pip install -r simple-op-vault/requirements.txt
 
 ### Node Requirements
 
-Each adapter requires a specific Bitcoin node variant. CTV and CAT+CSFS share Bitcoin Inquisition; CCV and OP_VAULT each need their own. Clone and build:
+Each adapter requires a specific node. CTV and CAT+CSFS share Bitcoin Inquisition; CCV and OP_VAULT each need their own custom Bitcoin build. Simplicity runs on Elements via the Simplex toolchain. Clone and build:
 
 ```bash
 # CTV — Bitcoin Inquisition
@@ -109,11 +110,19 @@ git clone -b 2023-02-opvault-inq https://github.com/jamesob/bitcoin.git ~/bitcoi
 cd ~/bitcoin-opvault && ./autogen.sh && ./configure --without-miniupnpc && make -j$(nproc)
 ```
 
+For Simplicity, install the Simplex toolchain (provides `elementsd`, `electrs`):
+
+```bash
+curl -L https://smplx.simplicity-lang.org | bash && simplexup --install
+cd simple-simplicity-vault && cargo build --release
+```
+
 The `switch-node.sh` script manages starting/stopping nodes and wiping regtest between runs:
 
 - **CTV:** `./switch-node.sh inquisition`
 - **CCV:** `./switch-node.sh ccv`
 - **OP_VAULT:** `./switch-node.sh opvault`
+- **Simplicity:** `./switch-node.sh elements` (starts `simplex regtest`, random ports auto-discovered)
 
 Switching wipes regtest state. If your node paths differ from the defaults (`~/bitcoin-inquisition`, `~/merkleize-bitcoin-ccv`, `~/bitcoin-opvault`), set the environment overrides documented in `switch-node.sh --help`.
 
@@ -132,7 +141,7 @@ uv run run.py run lifecycle_costs --covenant ctv
 uv run run.py run lifecycle_costs --covenant ccv
 uv run run.py run lifecycle_costs --covenant opvault
 
-# Run on all covenants (CTV → CCV → OP_VAULT → CAT+CSFS)
+# Run on all covenants (CTV → CCV → OP_VAULT → CAT+CSFS → Simplicity)
 uv run run.py run lifecycle_costs --covenant all
 
 # Run all core experiments across all covenants
@@ -220,17 +229,18 @@ uv run run.py run --all --covenant all
 
 Each adapter exposes the vault lifecycle through a common interface. Some capabilities are covenant-specific:
 
-| Capability | CTV | CCV | OP_VAULT | CAT+CSFS |
-|-----------|-----|-----|----------|----------|
-| `create_vault()` | Yes | Yes | Yes | Yes |
-| `trigger_unvault()` | Yes | Yes | Yes | Yes |
-| `complete_withdrawal()` | Yes | Yes | Yes | Yes |
-| `recover()` | Yes | Yes (keyless) | Yes (authorized) | Yes (cold key) |
-| `supports_revault()` | No | Yes | Yes | No |
-| `supports_batched_trigger()` | No | Yes | Yes | No |
-| `supports_keyless_recovery()` | No | Yes | No | No |
-| Address reuse safe | No | Yes | Yes | Yes |
-| Fee mechanism | Anchor output | No anchors | Fee input | Anchor output |
+| Capability | CTV | CCV | OP_VAULT | CAT+CSFS | Simplicity |
+|-----------|-----|-----|----------|----------|------------|
+| `create_vault()` | Yes | Yes | Yes | Yes | Yes |
+| `trigger_unvault()` | Yes | Yes | Yes | Yes | Yes |
+| `complete_withdrawal()` | Yes | Yes | Yes | Yes | Yes |
+| `recover()` | Yes | Yes (keyless) | Yes (authorized) | Yes (cold key) | Yes (cold key, output-constrained) |
+| `supports_revault()` | No | Yes | Yes | No | No |
+| `supports_batched_trigger()` | No | Yes | Yes | No | No |
+| `supports_keyless_recovery()` | No | Yes | No | No | No |
+| Address reuse safe | No | Yes | Yes | Yes | Yes |
+| Fee mechanism | Anchor output | No anchors | Fee input | SIGHASH_SINGLE\|ACP | Explicit fee output |
+| Chain | Bitcoin | Bitcoin | Bitcoin | Bitcoin | Elements |
 
 ## Testing
 
@@ -322,5 +332,7 @@ This work builds on vault implementations and covenant proposals by:
 - **Jeremy Rubin** — OP_CHECKTEMPLATEVERIFY (BIP-119) and the CTV vault design
 - **Salvatore Ingala** — OP_CHECKCONTRACTVERIFY (BIP-443), the MATT framework, and the `pymatt` vault implementation
 - **James O'Beirne** — OP_VAULT (BIP-345) and the `opvault-demo` reference implementation
+- **Andrew Poelstra** — CAT and Schnorr Tricks (introspection via OP_CAT + OP_CHECKSIGFROMSTACK)
+- **Blockstream Research** — Simplicity language, SimplicityHL compiler, and Simplex SDK
 
 See `REFERENCES.md` for the full prior art survey.

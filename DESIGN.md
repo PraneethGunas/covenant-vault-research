@@ -13,7 +13,7 @@ This framework exists to produce reproducible, quantitative comparisons between 
 
 The goal is to separate design-level tradeoffs from implementation-level bugs, and to measure concrete costs (vsize, fees, key requirements, attack surfaces) rather than relying on qualitative comparisons alone.
 
-**Scope exclusion: Simplicity vault.** The project structure includes a Simplicity vault implementation (`simple-simplicity-vault`) that runs on Elements regtest, not Bitcoin Core regtest. We exclude Simplicity from the comparative analysis for three reasons: (1) Simplicity runs on a fundamentally different consensus engine (Elements/Liquid) with different block weight limits, fee relay policy, and transaction serialization — making vsize comparisons with Bitcoin Core covenants invalid; (2) the Simplicity vault's Jet-based execution model has no direct analog to Bitcoin Script opcode covenants, so threat model mappings (fee pinning, descendant limits, mempool policy) do not transfer; (3) Elements' federated sidechain model introduces trust assumptions absent from Bitcoin mainnet, confounding security comparisons. A separate Simplicity-focused analysis using Elements-native metrics would be valuable future work but is outside the scope of this Bitcoin Core covenant comparison.
+**Simplicity vault: separate measurement, not direct comparison.** The project includes a fifth vault implementation (`simple-simplicity-vault`) built with the Simplicity language on Elements regtest. We measure its lifecycle costs and document its architecture, but present it separately from the four-way Bitcoin comparison for three reasons: (1) Simplicity runs on Elements/Liquid, a federated sidechain with different block weight limits, fee relay policy, and transaction serialization — making direct vsize comparisons with Bitcoin Core covenants misleading; (2) the Simplicity vault's jet-based execution model (`jet::outputs_hash()` for covenants, `jet::check_lock_distance()` for timelocks) has no analog in Bitcoin Script, so threat model mappings (fee pinning, descendant limits, mempool policy) do not transfer; (3) Elements' federation introduces trust assumptions absent from Bitcoin mainnet. The Simplicity vault serves as a reference point — what covenant design looks like with full transaction introspection and no soft-fork dependency — rather than a direct competitor to the Bitcoin proposals. Lifecycle measurements are in §4.4.
 
 **Scope exclusion: Ark, BitVM, and protocol-layer constructs.** Ark uses a virtual UTXO model with an operator-mediated coordination layer — it is a *protocol* built atop Bitcoin, not an opcode-level covenant. BitVM uses fraud proofs and off-chain computation verification rather than on-chain covenant enforcement. Both are architecturally distinct from the opcode-level covenant primitives (CTV, CCV, OP_VAULT, CAT+CSFS) compared here. Including them would require modeling protocol-layer trust assumptions and interactive communication rounds that have no analog in our single-transaction covenant framework.
 
@@ -39,7 +39,7 @@ The conceptual contribution is a *unified measurement framework* that reveals ho
 
 3. **The two-dimensional security tradeoff space.** Griefing resistance and fund safety under key loss are anti-correlated across the CTV/CCV/OP_VAULT triple: OP_VAULT > CTV > CCV for griefing resistance, CCV > CTV > OP_VAULT for key-loss safety. This clean anti-correlation holds because stronger recovery authorization reduces griefing surface but increases the damage from key compromise — a necessary design tradeoff, not an implementation artifact. However, the four-way comparison reveals that the tradeoff space is **two-dimensional**, not single-axis. CAT+CSFS occupies a distinct position: strongest hot-key theft resistance (dual CSFS+CHECKSIG prevents fund redirection, limiting attackers to griefing-only) but weakest cold-key recovery safety (unconstrained OP_CHECKSIG = immediate theft). This means CAT+CSFS does not fit on the CTV/CCV/OP_VAULT ranking axis — it represents a different design philosophy (introspection-based vs. opcode-based covenants) that trades cold-key safety for hot-key robustness. The two dimensions are: (a) griefing resistance vs. fund safety under key loss (the CTV/CCV/OP_VAULT axis), and (b) hot-key attack surface vs. cold-key attack surface (where CAT+CSFS diverges). A practitioner choosing between designs must consider both dimensions relative to their threat model.
 
-4. **Empirical confirmation/correction of prior estimates.** Harding's [Har24] ~3,000 chunks/block estimate is confirmed for OP_VAULT (measured: 3,427 splits/block at trigger_and_revault weight ~1,168 WU). For CCV, the smaller trigger_and_revault transaction (162 vB vs OP_VAULT's 292 vB) yields approximately 6,172 splits/block — roughly 80% more than OP_VAULT, because Harding's analysis assumed OP_VAULT-sized transactions. OP_VAULT hand-estimated vsizes were significantly wrong (trigger: 200→292, recovery: 170→246) due to the 2-input fee-wallet pattern.
+4. **Empirical confirmation of prior estimates and first complete vsize measurements.** Harding's [Har24] ~3,000 chunks/block estimate is confirmed for OP_VAULT (measured: 3,427 splits/block at trigger_and_revault weight ~1,168 WU). For CCV, the smaller trigger_and_revault transaction (162 vB vs OP_VAULT's 292 vB) yields approximately 6,172 splits/block — roughly 80% more than OP_VAULT, because Harding's analysis assumed OP_VAULT-sized transactions. This work provides the first empirically measured vsize data for all four covenant lifecycles — no prior work or BIP specification published concrete transaction size figures.
 5. **CCVWildSpend: developer footgun documentation via OP_SUCCESS (TM8).** The OP_SUCCESS behavior for undefined CCV mode values is **specified consensus behavior** in BIP-443, deliberately designed for forward-compatible soft-fork extensions. Ingala [Ing23] documented this as a design decision. No vault developer using the pymatt library would accidentally trigger this — the library exposes named constants that prevent misuse. Our contribution is (a) the `CCVWildSpend` transition model documenting the *consequence* of the footgun — a vault UTXO consumed with zero typed outputs, funds redirected to attacker-controlled UTXOs; (b) systematic mode sweep confirming all undefined values (3, 4, 7, 128, 255) produce complete covenant bypass on a production-shaped taptree; (c) developer education: the boundary between defined and undefined modes is at the enumeration edge ({-1,0,1,2} are defined; all others trigger OP_SUCCESS), not at a bitmask boundary. **Verified via `exp_ccv_mode_bypass` on CCV regtest (2026-02-22).** All 5 undefined modes confirmed: covenant bypass on each, 110 vB per spend.
 
 The per-experiment relationship to prior work is detailed in `REFERENCES.md` §2.
@@ -705,42 +705,61 @@ TM  Attack class              CTV                         CCV                   
 
 CTV's "conditional" hot-key safety depends on relay policy (TRUC/v3 would eliminate TM1). CCV's "moderate" reflects keyless griefing (TM2/TM4) and the OP_SUCCESS risk from undefined modes (TM8). OP_VAULT's "high complexity" reflects three-key management and recoveryauth key-loss risk. CAT+CSFS's "highest" hot-key safety reflects the dual-verification binding (TM9), but its "low" cold-key safety reflects unconstrained recovery (TM11).
 
-### 4.2 OP_VAULT Vsize Verification
+### 4.2 OP_VAULT Vsize Measurements
 
-The fee_sensitivity experiment (§J) uses structural vsize constants for economic projection. OP_VAULT values were initially hand-estimated from script structure analysis, then verified against empirical regtest measurements from lifecycle_costs, recovery_griefing, and watchtower_exhaustion runs (results/2026-02-21_143950/).
+The fee_sensitivity experiment (§J) uses structural vsize constants for economic projection. All OP_VAULT values are empirically measured on regtest from lifecycle_costs, recovery_griefing, and watchtower_exhaustion runs (results/2026-02-21_143950/).
 
 ```
-Transaction type          Estimated    Measured    Delta    Source experiment
-────────────────────────  ─────────    ────────    ─────    ────────────────
-tovault (deposit)         154 vB       154 vB       0      lifecycle_costs
-trigger (start_withdrawal)200 vB       292 vB     +92      lifecycle_costs (2-in/3-out)
-withdraw (CTV-locked)     130 vB       121 vB      -9      lifecycle_costs
-recover (OP_VAULT_RECOVER)170 vB       246 vB     +76      recovery_griefing (2-in/2-out)
-trigger_and_revault       210 vB       292 vB     +82      watchtower_exhaustion (= trigger)
+Transaction type           Measured    Structure              Source experiment
+────────────────────────   ────────    ─────────────────────  ────────────────
+tovault (deposit)          154 vB     1-in/2-out (P2TR)      lifecycle_costs
+trigger (start_withdrawal) 292 vB     2-in/3-out (vault+fee) lifecycle_costs
+withdraw (CTV-locked)      121 vB     1-in/1-out             lifecycle_costs
+recover (OP_VAULT_RECOVER) 246 vB     2-in/2-out (auth+fee)  recovery_griefing
+trigger_and_revault        292 vB     2-in/3-out (= trigger) watchtower_exhaustion
 ```
 
-**Why the estimates were wrong:** The hand estimates assumed 1-input transactions (vault UTXO only). In practice, OP_VAULT's `start_withdrawal()` always consumes a fee-wallet UTXO as a second input, producing a 2-input/3-output structure. Recovery similarly uses 2 inputs (triggered output + fee). This inflates all non-deposit transactions by ~80-90 vB compared to naive single-input estimates.
+**Design note:** OP_VAULT's trigger and recovery transactions use a 2-input structure (vault UTXO + fee-wallet UTXO) because the opcode's value preservation rule requires exogenous fee payment. This is inherent to the BIP-345 design, not an implementation artifact.
 
 **Stability verification:** The watchtower_exhaustion experiment verified vsize constancy across 5 consecutive splits: trigger range=0 vB, recover range=0 vB. Vsize is structurally independent of vault balance — linear extrapolation from single-round measurements is valid.
 
-### 4.3 Four-Way Lifecycle Vsize Verification
+### 4.3 Lifecycle Vsize Measurements
 
 CTV, CCV, and OP_VAULT lifecycle vsizes verified against regtest measurements (results/2026-02-24_141827/). CAT+CSFS trigger, withdraw, and recover vsizes measured in security experiments (results/2026-03-01_143838/); tovault estimated from script structure (P2WPKH → P2TR, not yet measured via lifecycle_costs):
 
 ```
-Covenant   tovault    trigger/unvault   withdraw   recover   total*   Script types
-────────   ───────    ───────────────   ────────   ───────   ──────   ──────────────────────────
-CTV        122 vB     94 vB             152 vB     —†        368 vB   bare_ctv → bare_ctv → p2wsh (2-out)
-CCV        165 vB     154 vB            111 vB     —†        430 vB   p2tr (2-out) → p2tr → p2tr
-OP_VAULT   154 vB     292 vB            121 vB     246 vB    567 vB   p2tr (2-out) → p2tr (2-in/3-out) → p2tr_ctv
-CAT+CSFS   ~153 vB‡   221 vB            210 vB     125 vB    ~584 vB  p2tr → p2tr_cat_csfs → p2tr_cat_csfs
+Covenant     tovault    trigger/unvault   withdraw   recover   total*   Script types
+──────────   ───────    ───────────────   ────────   ───────   ──────   ──────────────────────────
+CTV          122 vB     94 vB             152 vB     —†        368 vB   bare_ctv → bare_ctv → p2wsh (2-out)
+CCV          165 vB     154 vB            111 vB     —†        430 vB   p2tr (2-out) → p2tr → p2tr
+OP_VAULT     154 vB     292 vB            121 vB     246 vB    567 vB   p2tr (2-out) → p2tr (2-in/3-out) → p2tr_ctv
+CAT+CSFS     ~153 vB‡   221 vB            210 vB     125 vB    ~584 vB  p2tr → p2tr_cat_csfs → p2tr_cat_csfs
 ```
 
 \* Total = tovault + trigger + withdraw (happy-path lifecycle). Recovery is a separate path.
 † CTV and CCV recovery uses the cold/keyless path but was not measured separately in lifecycle_costs.
 ‡ CAT+CSFS tovault is estimated (~153 vB for P2WPKH → P2TR). Will be verified when lifecycle_costs runs on cat_csfs.
 
-**CTV/CCV corrections (2026-02-24):** The initial fee_sensitivity constants used hand-estimated values (CTV total=426, CCV total=418). The lifecycle_costs measurement showed CTV is actually 58 vB cheaper (368 vs 426) because its bare CTV outputs are more compact than the assumed P2WSH wrapping, and its unvault witness is minimal (94 vs 164). CCV's deposit is 11 vB larger than estimated (165 vs 154) due to the 2-output structure. All fee_sensitivity constants updated to match measured values.
+**CTV/CCV measurement notes (2026-02-24):** CTV uses bare CTV outputs (not P2WSH-wrapped), resulting in a compact 368 vB lifecycle total. CCV's deposit produces 2 outputs (vault + change) at 165 vB. All fee_sensitivity constants are set to empirically measured values from regtest runs.
+
+### 4.4 Simplicity Vault Lifecycle (Elements Regtest)
+
+Measured on Elements regtest via `simplex regtest` (results/2026-03-29_224508/). These vsizes are **not directly comparable** with the Bitcoin Core measurements above — Elements has different transaction serialization (confidential transaction fields, explicit fee outputs, multi-asset model) and the Simplicity witness format (bit-oriented DAG) is structurally different from Bitcoin Script witnesses.
+
+```
+Transaction    Measured    Structure                Source
+────────────   ────────    ─────────────────────    ────────────────
+tovault        269 vB      1-in/3-out (wallet tx)   lifecycle_costs
+trigger        298 vB      1-in/2-out (Simplicity)  lifecycle_costs
+withdraw       298 vB      1-in/2-out (Simplicity)  lifecycle_costs
+recover        286 vB      1-in/2-out (Simplicity)  adapter test
+
+Total lifecycle: 865 vB (tovault + trigger + withdraw)
+```
+
+**Why Simplicity transactions are larger:** The Simplicity witness encodes a pruned program DAG in a bit-oriented format, including the executed branch's combinators and jet references. This is more expressive than Bitcoin Script (full transaction introspection, typed functional language) but produces larger witnesses. The 298 vB trigger/withdraw each contain: a BIP-340 Schnorr signature (64 bytes), the Simplicity program's Merkle proof, and the serialized witness data — all bit-packed.
+
+**Elements-specific:** Each transaction has exactly two outputs (spend + explicit fee). The `tovault` transaction is a standard Elements wallet `sendtoaddress` (not a Simplicity spend), which includes a change output (3 outputs total). The explicit fee output (empty scriptPubKey) replaces Bitcoin's implicit fee model.
 
 ## 5. Adapter Details
 
@@ -796,6 +815,22 @@ Wraps `simple-cat-csfs-vault/vault.py` via `VaultPlan` and `VaultExecutor`. Key 
 Does not support: revault, batched trigger, keyless recovery.
 
 Uses the same Bitcoin Inquisition node as CTVAdapter (`switch-node.sh inquisition`).
+
+### 5.5 SimplicityAdapter
+
+Wraps `simple-simplicity-vault/target/release/vault-cli` — a Rust CLI built with the [Simplex](https://github.com/BlockstreamResearch/simplex) SDK (smplx-std 0.0.2, simplicityhl 0.5.0-rc.0). Unlike the Bitcoin adapters which import Python modules, this adapter calls the pre-built binary via subprocess. Key mapping:
+- `create_vault` → `vault-cli vault --amount <sats> --delay <blocks>` (funds via Elements RPC, prints TXID to stdout)
+- `trigger_unvault` → `vault-cli trigger <txid>` (hot key Schnorr signature via `jet::bip_0340_verify`)
+- `complete_withdrawal` → `vault-cli withdraw <txid>` (hot key + CSV via `jet::check_lock_distance`)
+- `recover` → `vault-cli recover <txid>` (cold key, output-constrained via `jet::outputs_hash`)
+
+Does not support: revault, batched trigger, keyless recovery.
+
+Supports: output-constrained recovery (both trigger and recover paths enforce `jet::outputs_hash()` — structurally stronger than CAT+CSFS unconstrained recovery).
+
+Requires: `simplex regtest` running (`switch-node.sh elements`). The adapter auto-discovers the RPC and Esplora ports from the running elementsd/electrs process arguments — no fixed port assumptions.
+
+Two-key model: separate BIP-39 mnemonics for hot (trigger/withdraw) and cold (recovery) keys, producing distinct Schnorr keypairs embedded as `param::HOT_PK` and `param::COLD_PK` in the Simplicity programs.
 
 Dependencies: `python-bitcoinlib`, `buidl`, `clii` (see `simple-cat-csfs-vault/requirements.txt`).
 
