@@ -759,17 +759,16 @@ CTV, CCV, and OP_VAULT lifecycle vsizes verified against regtest measurements (r
 ```
 Covenant     tovault    trigger/unvault   withdraw   recover   total*   Script types
 ──────────   ───────    ───────────────   ────────   ───────   ──────   ──────────────────────────
-CTV          122 vB     94 vB             152 vB     —†        368 vB   bare_ctv → bare_ctv → p2wsh (2-out)
+CTV          122 vB     94 vB             152 vB     133 vB    368 vB   bare_ctv → bare_ctv → p2wsh (2-out)
 CCV          165 vB     154 vB            111 vB     —†        430 vB   p2tr (2-out) → p2tr → p2tr
 OP_VAULT     154 vB     292 vB            121 vB     246 vB    567 vB   p2tr (2-out) → p2tr (2-in/3-out) → p2tr_ctv
-CAT+CSFS     ~153 vB‡   221 vB            210 vB     125 vB    ~584 vB  p2tr → p2tr_cat_csfs → p2tr_cat_csfs
+CAT+CSFS     122 vB     221 vB            210 vB     125 vB    553 vB   p2wpkh_to_p2tr → p2tr_cat_csfs → p2tr_cat_csfs
 ```
 
 \* Total = tovault + trigger + withdraw (happy-path lifecycle). Recovery is a separate path.
-† CTV and CCV recovery uses the cold/keyless path but was not measured separately in lifecycle_costs.
-‡ CAT+CSFS tovault is estimated (~153 vB for P2WPKH → P2TR). Will be verified when lifecycle_costs runs on cat_csfs.
+† CCV recovery uses the keyless path but was not measured separately in lifecycle_costs.
 
-**CTV/CCV measurement notes (2026-02-24):** CTV uses bare CTV outputs (not P2WSH-wrapped), resulting in a compact 368 vB lifecycle total. CCV's deposit produces 2 outputs (vault + change) at 165 vB. All fee_sensitivity constants are set to empirically measured values from regtest runs.
+**Measurement notes:** CTV uses bare CTV outputs (not P2WSH-wrapped), resulting in a compact 368 vB lifecycle. CTV tocold (133 vB) measured via recovery_griefing. CAT+CSFS tovault (122 vB) measured via lifecycle_costs (2026-03-30 run) — 31 vB smaller than the earlier ~153 vB estimate, correcting the lifecycle total from ~584 to 553 vB.
 
 ### 4.4 Simplicity Vault Lifecycle (Elements Regtest)
 

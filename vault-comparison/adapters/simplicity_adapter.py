@@ -395,6 +395,8 @@ class SimplicityAdapter(VaultAdapter):
                 spk.get("hex", "x") == "" and spk.get("asm", "x") == ""
             ):
                 value = vout.get("value", 0)
-                if isinstance(value, (int, float)):
-                    fee_sats += int(value * 100_000_000)
+                try:
+                    fee_sats += int(float(value) * 100_000_000)
+                except (TypeError, ValueError):
+                    pass
         return fee_sats

@@ -73,6 +73,10 @@ class CTVAdapter(VaultAdapter):
         self._vault_counter += 1
         return self.seed + b"-vault-" + str(self._vault_counter).encode()
 
+    def _fund_coin(self, amount_sats: int) -> tuple:
+        """Fund a fresh coin for external use (e.g., address reuse tests)."""
+        return self._pool.fund(amount_sats, seed=self._unique_seed())
+
     def create_vault(self, amount_sats: int) -> VaultState:
         """Fund a wallet, then create a vault of the specified amount."""
         coin, from_wallet = self._pool.fund(amount_sats, seed=self._unique_seed())
