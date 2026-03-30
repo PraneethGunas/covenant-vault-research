@@ -1,7 +1,9 @@
 # ============================================================
-# Bitcoin Covenant Vault Comparison — Makefile
+# Covenant Vault Comparison — Makefile
 # ============================================================
 # Wraps Docker commands for the full experiment lifecycle.
+# 5 covenants: CTV, CCV, OP_VAULT, CAT+CSFS, Simplicity.
+# 15 experiments across comparative, capability, and verification categories.
 #
 #   make build          Build the Docker image (~45 min first time)
 #   make test           Quick smoke test (lifecycle_costs on CTV)
@@ -27,9 +29,9 @@ rebuild:                        ## Force rebuild from scratch (no cache)
 
 # ── Run — by covenant ───────────────────────────────────────
 
-.PHONY: run-all run-ctv run-ccv run-opvault run-cat-csfs
+.PHONY: run-all run-ctv run-ccv run-opvault run-cat-csfs run-simplicity
 
-run-all:                        ## Run all core experiments on all covenants
+run-all:                        ## Run all core experiments on all 5 covenants
 	$(RUN) run --tag core --covenant all
 
 run-ctv:                        ## Run all core experiments on CTV
@@ -43,6 +45,9 @@ run-opvault:                    ## Run all core experiments on OP_VAULT
 
 run-cat-csfs:                   ## Run all core experiments on CAT+CSFS
 	$(RUN) run --tag core --covenant cat_csfs
+
+run-simplicity:                 ## Run all core experiments on Simplicity (Elements)
+	$(RUN) run --tag core --covenant simplicity
 
 # ── Run — by tag ────────────────────────────────────────────
 
@@ -61,15 +66,17 @@ run-fee:                        ## Run all fee-management experiments on all cov
 
 .PHONY: lifecycle fee-pinning fee-sensitivity recovery-griefing \
         watchtower-exhaustion address-reuse multi-input \
-        revault-amplification ccv-mode-bypass ccv-edge-cases \
-        opvault-trigger-key-theft opvault-recovery-auth
+        revault-amplification ccv-mode-bypass \
+        opvault-trigger-key-theft opvault-recovery-auth \
+        cat-csfs-hot-key-theft cat-csfs-witness-manipulation \
+        cat-csfs-destination-lock cat-csfs-cold-key-recovery
 
-lifecycle: COVENANT ?= all      ## Run lifecycle_costs (COVENANT=ctv|ccv|opvault|all)
+lifecycle: COVENANT ?= all      ## Run lifecycle_costs (COVENANT=ctv|ccv|opvault|cat_csfs|simplicity|all)
 lifecycle:
 	$(RUN) run lifecycle_costs --covenant $(COVENANT)
 
 fee-pinning: COVENANT ?= all
-fee-pinning:                    ## Run fee_pinning (CTV-specific attack)
+fee-pinning:                    ## Run fee_pinning (fee mechanism comparison)
 	$(RUN) run fee_pinning --covenant $(COVENANT)
 
 fee-sensitivity: COVENANT ?= all
@@ -96,17 +103,26 @@ revault-amplification: COVENANT ?= all
 revault-amplification:          ## Run revault_amplification cost analysis
 	$(RUN) run revault_amplification --covenant $(COVENANT)
 
-ccv-mode-bypass:                ## Run ccv_mode_bypass (CCV-only, critical)
+ccv-mode-bypass:                ## Run ccv_mode_bypass (CCV-only, verification)
 	$(RUN) run ccv_mode_bypass --covenant ccv
-
-ccv-edge-cases:                 ## Run ccv_edge_cases (CCV-only, developer footguns)
-	$(RUN) run ccv_edge_cases --covenant ccv
 
 opvault-trigger-key-theft:      ## Run opvault_trigger_key_theft (OP_VAULT-only)
 	$(RUN) run opvault_trigger_key_theft --covenant opvault
 
 opvault-recovery-auth:          ## Run opvault_recovery_auth (OP_VAULT-only)
 	$(RUN) run opvault_recovery_auth --covenant opvault
+
+cat-csfs-hot-key-theft:         ## Run cat_csfs_hot_key_theft (CAT+CSFS-only)
+	$(RUN) run cat_csfs_hot_key_theft --covenant cat_csfs
+
+cat-csfs-witness-manipulation:  ## Run cat_csfs_witness_manipulation (CAT+CSFS-only)
+	$(RUN) run cat_csfs_witness_manipulation --covenant cat_csfs
+
+cat-csfs-destination-lock:      ## Run cat_csfs_destination_lock (CAT+CSFS-only)
+	$(RUN) run cat_csfs_destination_lock --covenant cat_csfs
+
+cat-csfs-cold-key-recovery:     ## Run cat_csfs_cold_key_recovery (CAT+CSFS-only)
+	$(RUN) run cat_csfs_cold_key_recovery --covenant cat_csfs
 
 # ── Analysis ────────────────────────────────────────────────
 
@@ -120,7 +136,7 @@ list:                           ## List available experiments and tags
 
 # ── Testing ─────────────────────────────────────────────────
 
-.PHONY: test test-ctv test-ccv test-opvault test-cat-csfs
+.PHONY: test test-ctv test-ccv test-opvault test-cat-csfs test-simplicity
 
 test:                           ## Quick smoke test — lifecycle_costs on CTV
 	$(RUN) run lifecycle_costs --covenant ctv
@@ -139,6 +155,9 @@ test-opvault:                   ## Smoke test OP_VAULT (lifecycle + recovery_aut
 
 test-cat-csfs:                  ## Smoke test CAT+CSFS (lifecycle)
 	$(RUN) run lifecycle_costs --covenant cat_csfs
+
+test-simplicity:                ## Smoke test Simplicity (lifecycle on Elements)
+	$(RUN) run lifecycle_costs --covenant simplicity
 
 # ── Utilities ───────────────────────────────────────────────
 

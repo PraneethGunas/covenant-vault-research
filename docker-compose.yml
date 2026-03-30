@@ -10,6 +10,8 @@ services:
       - RPC_USER=rpcuser
       - RPC_PASSWORD=rpcpass
       - RPC_PORT=18443
+      - SIMPLEX_BIN_DIR=/opt/simplex-bin
+      - SIMPLICITY_VAULT_DIR=/workspace/simple-simplicity-vault
 
     volumes:
       - ./results:/data/results

@@ -1,9 +1,11 @@
 # ============================================================
 # Bitcoin Covenant Vault Comparison — Multi-stage Docker Build
 # ============================================================
-# Builds Bitcoin node variants (Inquisition, CCV, OP_VAULT) + Python framework in one image.
-# With BuildKit, stages 2-4 build in parallel.
-# Requires ~8 GB Docker memory (Settings → Resources).
+# Builds Bitcoin node variants (Inquisition, CCV, OP_VAULT) and
+# Elements/Simplicity (elementsd + electrs + vault-cli) + Python framework.
+# With BuildKit, stages 2-5 build in parallel.
+# Requires ~10 GB Docker memory (Settings → Resources).
+# linux/amd64 only (simplex pre-built binaries are platform-specific).
 #
 #   docker build -t vault-comparison .
 #
@@ -68,13 +70,40 @@ RUN ./autogen.sh \
 RUN mkdir -p /opt/bitcoin-opvault \
     && cp src/bitcoind src/bitcoin-cli /opt/bitcoin-opvault/
 
-# ── Stage 5: Final ──────────────────────────────────────────
+# ── Stage 5: Simplicity (Elements + vault-cli) ──────────────
+FROM base AS build-simplicity
+
+# Simplex toolchain — downloads pre-built elementsd, electrs, simplex CLI
+RUN curl -L https://smplx.simplicity-lang.org | bash \
+    && /root/.simplex/bin/simplexup --install
+
+# Rust nightly — needed only for building vault-cli
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly
+ENV PATH="/root/.cargo/bin:/root/.simplex/bin:${PATH}"
+
+# Clone and build vault-cli
+RUN git clone --depth 1 https://github.com/PraneethGunas/simple-simplicity-vault.git /src/simple-simplicity-vault
+WORKDIR /src/simple-simplicity-vault
+RUN cargo build --release
+
+# Stage outputs — only copy what's needed for runtime
+RUN mkdir -p /opt/simplex-bin /opt/simplicity-vault \
+    && cp /root/.simplex/bin/elementsd /opt/simplex-bin/ \
+    && cp /root/.simplex/bin/electrs /opt/simplex-bin/ \
+    && cp /root/.simplex/bin/simplex /opt/simplex-bin/ \
+    && cp /root/.simplex/bin/simplexup /opt/simplex-bin/ \
+    && cp /root/.simplex/bin/elements-cli /opt/simplex-bin/ 2>/dev/null || true \
+    && cp target/release/vault-cli /opt/simplicity-vault/
+
+# ── Stage 6: Final ──────────────────────────────────────────
 FROM base AS final
 
 # Copy node binaries from build stages
 COPY --from=build-inquisition /opt/bitcoin-inquisition /opt/bitcoin-inquisition
 COPY --from=build-ccv /opt/merkleize-bitcoin-ccv /opt/merkleize-bitcoin-ccv
 COPY --from=build-opvault /opt/bitcoin-opvault /opt/bitcoin-opvault
+COPY --from=build-simplicity /opt/simplex-bin /opt/simplex-bin
+COPY --from=build-simplicity /opt/simplicity-vault /opt/simplicity-vault
 
 # Create workspace
 WORKDIR /workspace
@@ -83,7 +112,12 @@ WORKDIR /workspace
 RUN git clone --depth 1 https://github.com/jamesob/simple-ctv-vault.git \
     && git clone --depth 1 https://github.com/Merkleize/pymatt.git \
     && git clone --depth 1 https://github.com/jamesob/opvault-demo.git simple-op-vault \
-    && git clone --depth 1 https://github.com/PraneethGunas/cat-csfs-vault.git simple-cat-csfs-vault
+    && git clone --depth 1 https://github.com/PraneethGunas/cat-csfs-vault.git simple-cat-csfs-vault \
+    && git clone --depth 1 https://github.com/PraneethGunas/simple-simplicity-vault.git
+
+# Place pre-built vault-cli where the adapter expects it
+RUN mkdir -p simple-simplicity-vault/target/release \
+    && cp /opt/simplicity-vault/vault-cli simple-simplicity-vault/target/release/vault-cli
 
 # Copy framework source
 COPY vault-comparison/ vault-comparison/
@@ -126,7 +160,12 @@ ENV INQUISITION_BIN=/opt/bitcoin-inquisition/bitcoind \
     CCV_CLI=/opt/merkleize-bitcoin-ccv/bitcoin-cli \
     OPVAULT_BIN=/opt/bitcoin-opvault/bitcoind \
     OPVAULT_CLI=/opt/bitcoin-opvault/bitcoin-cli \
-    BITCOIN_DATADIR=/root/.bitcoin
+    BITCOIN_DATADIR=/root/.bitcoin \
+    SIMPLEX_BIN_DIR=/opt/simplex-bin \
+    ELEMENTS_BIN=/opt/simplex-bin/elementsd \
+    ELEMENTS_CLI=/opt/simplex-bin/elements-cli \
+    ELECTRS_BIN=/opt/simplex-bin/electrs \
+    SIMPLICITY_VAULT_DIR=/workspace/simple-simplicity-vault
 
 # RPC defaults
 ENV RPC_HOST=localhost \
