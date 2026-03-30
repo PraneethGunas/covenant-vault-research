@@ -19,12 +19,15 @@ RESULTS  := results
 
 # ── Build ───────────────────────────────────────────────────
 
-.PHONY: build rebuild
+.PHONY: build build-from-source rebuild
 
-build:                          ## Build the Docker image (caches node compilations)
+build:                          ## Build using pre-built binaries (~3 min)
 	DOCKER_BUILDKIT=1 docker build --platform linux/amd64 -t $(IMAGE) .
 
-rebuild:                        ## Force rebuild from scratch (no cache)
+build-from-source:              ## Build compiling all nodes from source (~45 min)
+	DOCKER_BUILDKIT=1 docker build --platform linux/amd64 --build-arg BUILD_FROM_SOURCE=1 -t $(IMAGE) .
+
+rebuild:                        ## Force rebuild from scratch (no cache, pre-built binaries)
 	DOCKER_BUILDKIT=1 docker build --platform linux/amd64 --no-cache -t $(IMAGE) .
 
 # ── Run — by covenant ───────────────────────────────────────

@@ -1,17 +1,18 @@
 # ============================================================
 # Bitcoin Covenant Vault Comparison — Multi-stage Docker Build
 # ============================================================
-# Bitcoin node variants (Inquisition, CCV, OP_VAULT) and
-# Elements/Simplicity (elementsd + electrs + vault-cli) + Python framework.
-# Inquisition uses pre-built release binaries. CCV and OP_VAULT compile
-# from source (stages run in parallel via BuildKit). Simplex binaries are
-# pre-built. vault-cli compiles from Rust source.
-# Requires ~10 GB Docker memory (Settings → Resources).
+# All 5 covenants: CTV, CCV, OP_VAULT, CAT+CSFS, Simplicity.
 # linux/amd64 only (simplex pre-built binaries are platform-specific).
 #
+# Default: downloads pre-built binaries (~3 min build).
 #   docker build --platform linux/amd64 -t vault-comparison .
 #
+# From source: compiles CCV and OP_VAULT nodes + vault-cli (~45 min).
+#   docker build --platform linux/amd64 --build-arg BUILD_FROM_SOURCE=1 -t vault-comparison .
+#
 # ============================================================
+
+ARG BUILD_FROM_SOURCE=0
 
 # ── Stage 1: Base ────────────────────────────────────────────
 FROM ubuntu:24.04 AS base
@@ -19,11 +20,11 @@ FROM ubuntu:24.04 AS base
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # C++ build toolchain
+    # C++ build toolchain (needed for from-source builds and Python native extensions)
     build-essential cmake autoconf automake libtool pkg-config \
     # Bitcoin node dependencies
     libssl-dev libboost-all-dev libevent-dev libsqlite3-dev libzstd-dev \
-    # Python (python3-setuptools provides distutils for numpy build on 3.12)
+    # Python
     python3 python3-dev python3-pip python3-venv python3-setuptools \
     # Utilities
     git curl jq \
@@ -33,7 +34,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:${PATH}"
 
-# ── Stage 2: Bitcoin Inquisition (CTV) — pre-built release ───
+# Binary release base URL
+ARG RELEASE_URL=https://github.com/PraneethGunas/vault-comparison/releases/download/docker-binaries
+
+# ── Stage 2: Bitcoin Inquisition (CTV) — always pre-built ───
 FROM base AS build-inquisition
 
 RUN mkdir -p /opt/bitcoin-inquisition \
@@ -41,8 +45,16 @@ RUN mkdir -p /opt/bitcoin-inquisition \
        | tar xz --strip-components=2 -C /opt/bitcoin-inquisition \
          bitcoin-29.2-inq/bin/bitcoind bitcoin-29.2-inq/bin/bitcoin-cli
 
-# ── Stage 3: Merkleize Bitcoin (CCV) ────────────────────────
-FROM base AS build-ccv
+# ── Stage 3a: CCV — pre-built binary ─────────────────────────
+FROM base AS ccv-prebuilt
+
+ARG RELEASE_URL
+RUN mkdir -p /opt/merkleize-bitcoin-ccv \
+    && curl -L ${RELEASE_URL}/ccv-linux-x86_64.tar.gz \
+       | tar xz -C /opt/merkleize-bitcoin-ccv
+
+# ── Stage 3b: CCV — build from source ────────────────────────
+FROM base AS ccv-source
 
 RUN git clone --depth 1 --single-branch -b inq-ccv \
     https://github.com/Merkleize/bitcoin.git /src/merkleize-bitcoin-ccv
@@ -54,8 +66,21 @@ RUN cmake -B build -DBUILD_TESTING=OFF -DBUILD_BENCH=OFF \
 RUN mkdir -p /opt/merkleize-bitcoin-ccv \
     && cp build/bin/bitcoind build/bin/bitcoin-cli /opt/merkleize-bitcoin-ccv/
 
-# ── Stage 4: OP_VAULT (jamesob/bitcoin) ─────────────────────
-FROM base AS build-opvault
+# ── Stage 3: CCV selector ────────────────────────────────────
+FROM ccv-prebuilt AS ccv-0
+FROM ccv-source AS ccv-1
+FROM ccv-${BUILD_FROM_SOURCE} AS build-ccv
+
+# ── Stage 4a: OP_VAULT — pre-built binary ────────────────────
+FROM base AS opvault-prebuilt
+
+ARG RELEASE_URL
+RUN mkdir -p /opt/bitcoin-opvault \
+    && curl -L ${RELEASE_URL}/opvault-linux-x86_64.tar.gz \
+       | tar xz -C /opt/bitcoin-opvault
+
+# ── Stage 4b: OP_VAULT — build from source ───────────────────
+FROM base AS opvault-source
 
 RUN git clone --depth 1 --single-branch -b 2023-02-opvault-inq \
     https://github.com/jamesob/bitcoin.git /src/bitcoin-opvault
@@ -68,14 +93,36 @@ RUN ./autogen.sh \
 RUN mkdir -p /opt/bitcoin-opvault \
     && cp src/bitcoind src/bitcoin-cli /opt/bitcoin-opvault/
 
-# ── Stage 5: Simplicity (Elements + vault-cli) ──────────────
-FROM base AS build-simplicity
+# ── Stage 4: OP_VAULT selector ───────────────────────────────
+FROM opvault-prebuilt AS opvault-0
+FROM opvault-source AS opvault-1
+FROM opvault-${BUILD_FROM_SOURCE} AS build-opvault
 
-# Simplex toolchain — downloads pre-built elementsd, electrs, simplex CLI
+# ── Stage 5a: Simplicity — pre-built vault-cli ───────────────
+FROM base AS simplicity-prebuilt
+
+# Simplex toolchain (elementsd + electrs + simplex CLI)
 RUN curl -L https://smplx.simplicity-lang.org | bash \
     && /root/.simplex/bin/simplexup --install 0.0.2
 
-# Rust nightly — needed only for building vault-cli
+ARG RELEASE_URL
+RUN mkdir -p /opt/simplex-bin /opt/simplicity-vault \
+    && cp /root/.simplex/bin/elementsd /opt/simplex-bin/ \
+    && cp /root/.simplex/bin/electrs /opt/simplex-bin/ \
+    && cp /root/.simplex/bin/simplex /opt/simplex-bin/ \
+    && cp /root/.simplex/bin/simplexup /opt/simplex-bin/ \
+    && cp /root/.simplex/bin/elements-cli /opt/simplex-bin/ 2>/dev/null || true \
+    && curl -L ${RELEASE_URL}/vault-cli-linux-x86_64.tar.gz \
+       | tar xz -C /opt/simplicity-vault
+
+# ── Stage 5b: Simplicity — build vault-cli from source ───────
+FROM base AS simplicity-source
+
+# Simplex toolchain
+RUN curl -L https://smplx.simplicity-lang.org | bash \
+    && /root/.simplex/bin/simplexup --install 0.0.2
+
+# Rust nightly (vault-cli build only)
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly
 ENV PATH="/root/.cargo/bin:/root/.simplex/bin:${PATH}"
 
@@ -84,7 +131,6 @@ RUN git clone --depth 1 https://github.com/PraneethGunas/simple-simplicity-vault
 WORKDIR /src/simple-simplicity-vault
 RUN cargo build --release
 
-# Stage outputs — only copy what's needed for runtime
 RUN mkdir -p /opt/simplex-bin /opt/simplicity-vault \
     && cp /root/.simplex/bin/elementsd /opt/simplex-bin/ \
     && cp /root/.simplex/bin/electrs /opt/simplex-bin/ \
@@ -92,6 +138,11 @@ RUN mkdir -p /opt/simplex-bin /opt/simplicity-vault \
     && cp /root/.simplex/bin/simplexup /opt/simplex-bin/ \
     && cp /root/.simplex/bin/elements-cli /opt/simplex-bin/ 2>/dev/null || true \
     && cp target/release/vault-cli /opt/simplicity-vault/
+
+# ── Stage 5: Simplicity selector ─────────────────────────────
+FROM simplicity-prebuilt AS simplicity-0
+FROM simplicity-source AS simplicity-1
+FROM simplicity-${BUILD_FROM_SOURCE} AS build-simplicity
 
 # ── Stage 6: Final ──────────────────────────────────────────
 FROM base AS final
