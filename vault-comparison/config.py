@@ -75,6 +75,9 @@ class FrameworkConfig:
     cat_csfs_repo: Path = field(
         default_factory=lambda: Path(__file__).resolve().parents[1] / "simple-cat-csfs-vault"
     )
+    simplicity_repo: Path = field(
+        default_factory=lambda: Path(__file__).resolve().parents[1] / "simple-simplicity-vault"
+    )
 
     # Experiment defaults
     default_block_delay: int = 10
@@ -97,6 +100,7 @@ class FrameworkConfig:
             "ccv": self.ccv_repo,
             "opvault": self.opvault_repo,
             "cat_csfs": self.cat_csfs_repo,
+            "simplicity": self.simplicity_repo,
         }
         return mapping[covenant]
 

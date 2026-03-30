@@ -42,6 +42,8 @@ def test_repo_for():
     assert "simple-ctv-vault" in str(ctv_repo)
     cat_repo = cfg.repo_for("cat_csfs")
     assert "simple-cat-csfs-vault" in str(cat_repo)
+    sim_repo = cfg.repo_for("simplicity")
+    assert "simple-simplicity-vault" in str(sim_repo)
 
 
 def test_cfg_singleton():
