@@ -1,9 +1,11 @@
 # ============================================================
 # Bitcoin Covenant Vault Comparison — Multi-stage Docker Build
 # ============================================================
-# Builds Bitcoin node variants (Inquisition, CCV, OP_VAULT) and
+# Bitcoin node variants (Inquisition, CCV, OP_VAULT) and
 # Elements/Simplicity (elementsd + electrs + vault-cli) + Python framework.
-# With BuildKit, stages 2-5 build in parallel.
+# Inquisition uses pre-built release binaries. CCV and OP_VAULT compile
+# from source (stages run in parallel via BuildKit). Simplex binaries are
+# pre-built. vault-cli compiles from Rust source.
 # Requires ~10 GB Docker memory (Settings → Resources).
 # linux/amd64 only (simplex pre-built binaries are platform-specific).
 #
@@ -21,8 +23,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential cmake autoconf automake libtool pkg-config \
     # Bitcoin node dependencies
     libssl-dev libboost-all-dev libevent-dev libsqlite3-dev libzstd-dev \
-    # Python
-    python3 python3-dev python3-pip python3-venv \
+    # Python (python3-setuptools provides distutils for numpy build on 3.12)
+    python3 python3-dev python3-pip python3-venv python3-setuptools \
     # Utilities
     git curl jq \
     && rm -rf /var/lib/apt/lists/*
@@ -31,18 +33,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:${PATH}"
 
-# ── Stage 2: Bitcoin Inquisition (CTV) ──────────────────────
+# ── Stage 2: Bitcoin Inquisition (CTV) — pre-built release ───
 FROM base AS build-inquisition
 
-RUN git clone --depth 1 --single-branch \
-    https://github.com/bitcoin-inquisition/bitcoin.git /src/bitcoin-inquisition
-
-WORKDIR /src/bitcoin-inquisition
-RUN cmake -B build -DBUILD_TESTING=OFF -DBUILD_BENCH=OFF \
-    && cmake --build build -j4
-
 RUN mkdir -p /opt/bitcoin-inquisition \
-    && cp build/bin/bitcoind build/bin/bitcoin-cli /opt/bitcoin-inquisition/
+    && curl -L https://github.com/bitcoin-inquisition/bitcoin/releases/download/v29.2-inq/bitcoin-29.2-inq-x86_64-linux-gnu.tar.gz \
+       | tar xz --strip-components=2 -C /opt/bitcoin-inquisition \
+         bitcoin-29.2-inq/bin/bitcoind bitcoin-29.2-inq/bin/bitcoin-cli
 
 # ── Stage 3: Merkleize Bitcoin (CCV) ────────────────────────
 FROM base AS build-ccv
@@ -131,8 +128,10 @@ RUN sed -i '1s/^/openssl_conf = openssl_init\n/' /etc/ssl/openssl.cnf \
     && printf '\n[openssl_init]\nproviders = provider_sect\n[provider_sect]\ndefault = default_sect\nlegacy = legacy_sect\n[default_sect]\nactivate = 1\n[legacy_sect]\nactivate = 1\n' >> /etc/ssl/openssl.cnf
 
 # Install Python dependencies via uv (cached at build time so runtime is fast)
+# pymatt's lockfile pins numpy==1.24.4 which needs distutils (removed in Python 3.12).
+# Delete the lockfile and re-resolve to get a Python 3.12-compatible numpy.
 RUN cd vault-comparison && uv sync --extra all \
-    && cd ../pymatt && uv sync --extra examples \
+    && cd ../pymatt && rm -f uv.lock && uv sync --extra examples \
     && pip3 install --no-cache-dir --break-system-packages -r ../simple-op-vault/requirements.txt
 
 # Write pymatt .env for RPC
