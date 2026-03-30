@@ -7,12 +7,12 @@
 # Requires ~10 GB Docker memory (Settings → Resources).
 # linux/amd64 only (simplex pre-built binaries are platform-specific).
 #
-#   docker build -t vault-comparison .
+#   docker build --platform linux/amd64 -t vault-comparison .
 #
 # ============================================================
 
 # ── Stage 1: Base ────────────────────────────────────────────
-FROM ubuntu:22.04 AS base
+FROM ubuntu:24.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -75,7 +75,7 @@ FROM base AS build-simplicity
 
 # Simplex toolchain — downloads pre-built elementsd, electrs, simplex CLI
 RUN curl -L https://smplx.simplicity-lang.org | bash \
-    && /root/.simplex/bin/simplexup --install
+    && /root/.simplex/bin/simplexup --install 0.0.2
 
 # Rust nightly — needed only for building vault-cli
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly

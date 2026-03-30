@@ -22,10 +22,10 @@ RESULTS  := results
 .PHONY: build rebuild
 
 build:                          ## Build the Docker image (caches node compilations)
-	DOCKER_BUILDKIT=1 docker build -t $(IMAGE) .
+	DOCKER_BUILDKIT=1 docker build --platform linux/amd64 -t $(IMAGE) .
 
 rebuild:                        ## Force rebuild from scratch (no cache)
-	DOCKER_BUILDKIT=1 docker build --no-cache -t $(IMAGE) .
+	DOCKER_BUILDKIT=1 docker build --platform linux/amd64 --no-cache -t $(IMAGE) .
 
 # ── Run — by covenant ───────────────────────────────────────
 
