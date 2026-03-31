@@ -43,16 +43,22 @@ research experiments/
 
 ## Quick Start (Docker)
 
-The fastest way to run everything. Builds the Bitcoin nodes and the Python framework in a single image.
+The fastest way to run everything. Packages all 5 covenant nodes (CTV, CCV, OP_VAULT, CAT+CSFS, Simplicity) and the Python framework in a single image. linux/amd64 only (simplex binaries are platform-specific).
 
 ```bash
-# Build (~45 min first time, cached after that)
+# Build with pre-built binaries (~3 min)
 make build
+
+# Or build from source (~45 min, compiles all Bitcoin/Elements nodes)
+make build-from-source
+
+# Rebuild without cache
+make rebuild
 
 # Run a single experiment
 make lifecycle COVENANT=ctv
 
-# Run all core experiments across all covenants
+# Run all 15 experiments across all 5 covenants
 make run-all
 
 # List available experiments and tags
@@ -61,6 +67,8 @@ make list
 # Interactive shell inside the container
 make shell
 ```
+
+The default `make build` uses pre-built binaries and finishes in about 3 minutes. Pass `--build-arg BUILD_FROM_SOURCE=1` to compile all nodes from source instead (useful for auditing or custom patches).
 
 Requires Docker with at least 8 GB memory (Docker Desktop → Settings → Resources).
 
