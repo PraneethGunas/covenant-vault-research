@@ -90,17 +90,21 @@ git submodule update --init --recursive
 
 ### Dependencies
 
-Install Python dependencies:
+All commands below assume you are at the repo root (`vault-comparison/`).
+
+Install the framework's Python dependencies:
 
 ```bash
-cd vault-comparison    # the framework subdirectory, not the repo root
+cd vault-comparison/vault-comparison   # framework subdirectory
 uv sync --extra all
+cd ..                                  # back to repo root
 ```
 
-For OP_VAULT, install its dependencies separately (from the repo root):
+Install vault-specific Python dependencies:
 
 ```bash
 pip install -r simple-op-vault/requirements.txt
+pip install -r simple-cat-csfs-vault/requirements.txt
 ```
 
 ### Node Requirements
@@ -108,7 +112,7 @@ pip install -r simple-op-vault/requirements.txt
 Each adapter requires a specific node. CTV and CAT+CSFS share Bitcoin Inquisition; CCV and OP_VAULT each need their own custom Bitcoin build. Simplicity runs on Elements via the Simplex toolchain. Clone and build:
 
 ```bash
-# CTV — Bitcoin Inquisition
+# CTV + CAT+CSFS — Bitcoin Inquisition
 git clone https://github.com/bitcoin-inquisition/bitcoin.git ~/bitcoin-inquisition
 cd ~/bitcoin-inquisition && cmake -B build && cmake --build build -j$(nproc)
 
@@ -121,11 +125,11 @@ git clone -b 2023-02-opvault-inq https://github.com/jamesob/bitcoin.git ~/bitcoi
 cd ~/bitcoin-opvault && ./autogen.sh && ./configure --without-miniupnpc && make -j$(nproc)
 ```
 
-For Simplicity, install the Simplex toolchain (provides `elementsd`, `electrs`):
+For Simplicity, install the Simplex toolchain (provides `elementsd`, `electrs`) and build the vault CLI:
 
 ```bash
 curl -L https://smplx.simplicity-lang.org | bash && simplexup --install
-cd simple-simplicity-vault && cargo build --release
+cd simple-simplicity-vault && cargo build --release && cd ..
 ```
 
 The `switch-node.sh` script manages starting/stopping nodes and wiping regtest between runs:
