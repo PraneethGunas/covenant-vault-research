@@ -1,0 +1,15 @@
+[submodule "simple-ctv-vault"]
+	path = simple-ctv-vault
+	url = https://github.com/jamesob/simple-ctv-vault.git
+[submodule "pymatt"]
+	path = pymatt
+	url = https://github.com/Merkleize/pymatt.git
+[submodule "simple-op-vault"]
+	path = simple-op-vault
+	url = https://github.com/jamesob/opvault-demo.git
+[submodule "simple-simplicity-vault"]
+	path = simple-simplicity-vault
+	url = https://github.com/PraneethGunas/simple-simplicity-vault.git
+[submodule "simple-cat-csfs-vault"]
+	path = simple-cat-csfs-vault
+	url = https://github.com/PraneethGunas/cat-csfs-vault.git

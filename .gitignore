@@ -1,9 +1,4 @@
-# === Upstream cloned repos (have their own git history) ===
-simple-op-vault/
-simple-ctv-vault/
-simple-cat-csfs-vault/
-simple-simplicity-vault/
-pymatt/
+# === Bitcoin node source builds (not submodules) ===
 bitcoin-inquisition/
 bitcoin-opvault/
 

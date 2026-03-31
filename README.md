@@ -34,11 +34,11 @@ research experiments/
 ├── formalization/             # Alloy models for covenant properties
 │   └── alloy/                # .als specs per covenant + cross-covenant
 ├── site/                     # Interactive research site (separate repo)
-├── simple-ctv-vault/         # CTV vault (upstream clone)
-├── simple-cat-csfs-vault/    # CAT+CSFS vault (custom implementation)
-├── pymatt/                   # CCV vault (upstream clone)
-├── simple-op-vault/          # OP_VAULT demo (upstream clone)
-└── simple-simplicity-vault/  # Simplicity vault (Elements regtest)
+├── simple-ctv-vault/         # CTV vault [submodule: jamesob/simple-ctv-vault]
+├── simple-cat-csfs-vault/    # CAT+CSFS vault [submodule: PraneethGunas/cat-csfs-vault]
+├── pymatt/                   # CCV vault [submodule: Merkleize/pymatt]
+├── simple-op-vault/          # OP_VAULT demo [submodule: jamesob/opvault-demo]
+└── simple-simplicity-vault/  # Simplicity vault [submodule: PraneethGunas/simple-simplicity-vault]
 ```
 
 ## Quick Start (Docker)
@@ -76,16 +76,19 @@ Results are mounted to `./results/` on your host. See `make help` for all target
 
 ## Manual Setup
 
-If you prefer running without Docker, clone the upstream repos and build the nodes yourself.
+If you prefer running without Docker, clone with submodules and build the nodes yourself.
 
-### Dependencies
+### Clone
 
 ```bash
-# Clone upstream repos
-git clone https://github.com/jamesob/simple-ctv-vault.git
-git clone https://github.com/Merkleize/pymatt.git
-git clone https://github.com/jamesob/opvault-demo.git simple-op-vault
+git clone --recurse-submodules https://github.com/PraneethGunas/vault-comparison.git
+cd vault-comparison
+
+# If already cloned without --recurse-submodules:
+git submodule update --init --recursive
 ```
+
+### Dependencies
 
 Install Python dependencies:
 
