@@ -44,9 +44,7 @@ def _ensure_opvault_imports():
         sys.path.remove(repo_str)
     sys.path.insert(0, repo_str)
 
-    # Evict any cached 'main' module (e.g. CTV's main.py from a previous
-    # covenant run in the same process).  Without this, `import main` returns
-    # the stale module from sys.modules instead of opvault-demo's main.py.
+    # Evict cached 'main' module to ensure opvault-demo's main.py is loaded.
     if "main" in sys.modules:
         cached = sys.modules["main"]
         cached_path = getattr(cached, "__file__", "") or ""
@@ -57,9 +55,7 @@ def _ensure_opvault_imports():
     import verystable
     import verystable.core.messages as _msgs
 
-    # ── Monkey-patch: verystable 28.1.0-dev renamed CTransaction.nVersion
-    # to .version, but softforks._get_standard_template_hash still
-    # references self.nVersion.  Add a compatibility property so both work.
+    # Compatibility: map nVersion → version for API differences.
     _CTx = _msgs.CTransaction
     if not hasattr(_CTx, "nVersion"):
         _CTx.nVersion = property(lambda self: self.version)
@@ -68,9 +64,7 @@ def _ensure_opvault_imports():
     if _MTx is not None and not hasattr(_MTx, "nVersion"):
         _MTx.nVersion = property(lambda self: self.version)
 
-    # ── Monkey-patch: upstream main.py passes `script=` kwarg to
-    # TaprootSignatureHash, but verystable 28.1.0-dev renamed
-    # it to `leaf_script=`.  Wrap to accept both.
+    # Compatibility: map script → leaf_script for TaprootSignatureMsg.
     import verystable.core.script as _script
     _orig_sig_msg = _script.TaprootSignatureMsg
 
@@ -131,9 +125,7 @@ class OPVaultAdapter(VaultAdapter):
         # Pre-fund the fee wallet: mine blocks to its address, mature them
         self._fund_fee_wallet()
 
-        # Patch upstream get_utxo: the original checks self.utxos[0]
-        # maturity (which may be a locked/immature entry) instead of
-        # filtering to mature unlocked UTXOs first.
+        # Corrected get_utxo: filter for mature unlocked UTXOs before selection.
         def _patched_get_utxo(wallet_self):
             wallet_self.rescan()
             height = wallet_self.rpc.getblockcount()

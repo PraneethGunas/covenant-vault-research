@@ -1,7 +1,7 @@
 """Experiment: CCV Mode Bypass — Developer Footgun on Production-Shaped Vault
 
-Escalates the synthetic mode-confusion finding (exp_ccv_edge_cases) to a
-production-shaped vault.  Constructs a Vault with the SAME taptree as the
+Verifies BIP-443 OP_SUCCESS behavior on a production-shaped vault.
+Constructs a Vault with the SAME taptree as the
 real pymatt Vault (trigger + recover leaves), but the recover leaf uses
 a developer-supplied CCV mode value outside the defined enumeration {-1,0,1,2}.
 

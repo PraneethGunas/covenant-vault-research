@@ -647,7 +647,7 @@ def _phase2_non_ctv_comparison(adapter, result, rpc):
     )
     result.observe(
         "  CTV:      Anchor outputs + fee key → descendant-chain pinning "
-        "            → fund theft (with hot+fee key).  CRITICAL vulnerability."
+        "            → fund theft (with hot+fee key compromise)."
     )
     result.observe(
         "  CCV:      No anchors, relay-policy fees → no pinning surface."

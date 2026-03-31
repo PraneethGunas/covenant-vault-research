@@ -76,19 +76,11 @@ from experiments.registry import register
 #   - tohot/withdraw (152 vB) is the hot withdrawal after CSV, P2WSH with
 #     2 outputs (hot destination + anchor).  The anchor output adds ~44 vB
 #     compared to a bare P2WPKH output.
-#   - tocold (180 vB) is the cold sweep (recovery path), hand-estimated.
-#     Not yet verified via recovery experiment on the Inquisition node.
+#   - tocold (133 vB) is the cold sweep (recovery path), measured via recovery_griefing.
 CTV_TOVAULT_VSIZE = 122       # bare CTV funding tx (1-in/1-out)
 CTV_UNVAULT_VSIZE = 94        # CTV-committed unvault (minimal witness)
 CTV_WITHDRAW_VSIZE = 152      # P2WSH hot withdrawal after CSV (2 outputs: hot + anchor)
-CTV_TOCOLD_VSIZE = 180        # Cold sweep (recovery path) — ⚠ ESTIMATED, NOT MEASURED.
-                              # Derivation: tocold_tx and tohot_tx share identical non-witness data
-                              # (1 P2WSH input, 2 outputs: P2WPKH destination + 550-sat anchor).
-                              # They differ only in witness: tohot = [~72B ECDSA sig, 1B OP_TRUE,
-                              # ~80B redeemScript]; tocold = [1B OP_FALSE, ~80B redeemScript].
-                              # The ~71 fewer witness bytes save ~18 vB under segwit discount,
-                              # giving tocold ≈ 134 vB (= tohot 152 - 18).  We use 180 vB as a
-                              # CONSERVATIVE UPPER BOUND (34% above the structural estimate).
+CTV_TOCOLD_VSIZE = 133        # Cold sweep (recovery path), measured via recovery_griefing.
                               # Robustness: this constant affects ONLY CTV griefing defender cost
                               # and fee pinning recovery cost.  The central finding (fee-dependent
                               # crossover, Finding 4) depends entirely on measured CCV/OP_VAULT

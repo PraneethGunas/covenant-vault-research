@@ -286,7 +286,7 @@ def _run_hot_key_theft(adapter, result, rpc):
         txid = cat_rpc.sendrawtransaction(mutated_hex)
         result.observe(
             f"UNEXPECTED: Mutated trigger ACCEPTED — {txid[:16]}...  "
-            "This means the covenant was BYPASSED.  CRITICAL vulnerability."
+            "Dual-verification binding failed — output redirection possible."
         )
         result.error = "Mutated trigger accepted — covenant bypass"
         cat_rpc.generatetoaddress(1, adapter.fee_wallet.p2wpkh_address)

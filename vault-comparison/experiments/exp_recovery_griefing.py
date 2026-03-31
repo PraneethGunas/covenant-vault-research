@@ -101,9 +101,7 @@ def run(adapter: VaultAdapter) -> ExperimentResult:
 
     rpc = adapter.rpc
 
-    # measured_vsizes will be populated by the sub-functions with actual
-    # regtest measurements, replacing the previous hardcoded CCV defaults
-    # that produced WRONG numbers for OP_VAULT and CAT+CSFS adapters.
+    # Populated by sub-functions with actual regtest measurements.
     measured_vsizes = {"trigger": 0, "recover": 0}
 
     # Dispatch: CTV griefing has a reversed direction (attacker triggers with
@@ -137,9 +135,6 @@ def run(adapter: VaultAdapter) -> ExperimentResult:
         ),
     )
 
-    # Use MEASURED vsizes from the actual adapter, not hardcoded defaults.
-    # Previous code used CCV-specific values (154/122) regardless of adapter,
-    # producing incorrect fee tables for OP_VAULT (292/246) and CAT+CSFS (221/125).
     trigger_vsize = measured_vsizes.get("trigger", 0)
     recover_vsize = measured_vsizes.get("recover", 0)
 
