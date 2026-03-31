@@ -2,6 +2,7 @@
 simple-op-vault/
 simple-ctv-vault/
 simple-cat-csfs-vault/
+simple-simplicity-vault/
 pymatt/
 bitcoin-inquisition/
 bitcoin-opvault/
@@ -58,5 +59,12 @@ Thumbs.db
 # === Site (has its own repo) ===
 /site/
 
+# Agentic folders
 /agent-loop/
+
+# custom mempool
 /covenant-mempool/
+
+# === Thesis / presentation files ===
+/presentation/
+~$*
