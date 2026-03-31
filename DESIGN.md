@@ -771,8 +771,8 @@ CTV, CCV, and OP_VAULT lifecycle vsizes verified against regtest measurements (r
 ```
 Covenant     tovault    trigger/unvault   withdraw   recover   total*   Script types
 ──────────   ───────    ───────────────   ────────   ───────   ──────   ──────────────────────────
-CTV          122 vB     94 vB             152 vB     133 vB    368 vB   bare_ctv → bare_ctv → p2wsh (2-out)
-CCV          165 vB     154 vB            111 vB     —†        430 vB   p2tr (2-out) → p2tr → p2tr
+CTV          121 vB     94 vB             152 vB     133 vB    367 vB   bare_ctv → bare_ctv → p2wsh (2-out)
+CCV          300 vB     154 vB            111 vB     —†        565 vB   p2tr (2-out) → p2tr → p2tr
 OP_VAULT     154 vB     292 vB            121 vB     246 vB    567 vB   p2tr (2-out) → p2tr (2-in/3-out) → p2tr_ctv
 CAT+CSFS     122 vB     221 vB            210 vB     125 vB    553 vB   p2wpkh_to_p2tr → p2tr_cat_csfs → p2tr_cat_csfs
 ```
