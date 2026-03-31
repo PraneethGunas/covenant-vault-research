@@ -908,12 +908,12 @@ Adapters resolve external repos relative to the vault-comparison directory:
 
 Expected workspace layout:
 ```
-research experiments/
-├── simple-ctv-vault/              # Upstream: jamesob
-├── pymatt/                        # Upstream: Merkleize
-├── simple-op-vault/               # Upstream: jamesob (opvault-demo)
-├── simple-cat-csfs-vault/         # Ours: PraneethGunas/cat-csfs-vault
-├── simple-simplicity-vault/       # Ours: PraneethGunas/simple-simplicity-vault
+covenant-vault-research/
+├── simple-ctv-vault/              # Submodule: jamesob/simple-ctv-vault
+├── pymatt/                        # Submodule: Merkleize/pymatt
+├── simple-op-vault/               # Submodule: jamesob/opvault-demo
+├── simple-cat-csfs-vault/         # Submodule: PraneethGunas/cat-csfs-vault
+├── simple-simplicity-vault/       # Submodule: PraneethGunas/simple-simplicity-vault
 ├── vault-comparison/              # Framework source
 │   ├── adapters/                  # Vault drivers (5 adapters)
 │   ├── experiments/               # 15 experiment modules

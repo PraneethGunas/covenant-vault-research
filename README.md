@@ -11,7 +11,7 @@ The four Bitcoin covenant proposals represent fundamentally different design phi
 ## Repository Layout
 
 ```
-research experiments/
+covenant-vault-research/
 ├── README.md                 # This file
 ├── REFERENCES.md             # Prior art and per-experiment citations
 ├── DESIGN.md                 # Architecture, threat models, experiment catalog
