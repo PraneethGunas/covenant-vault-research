@@ -685,14 +685,15 @@ class OPVaultAdapter(VaultAdapter):
         """Trigger multiple vault UTXOs in a single transaction.
 
         OP_VAULT's start_withdrawal() accepts a list of VaultUtxo objects,
-        combining them into a single trigger transaction.
+        combining them into a single trigger transaction. Each vault may
+        have its own VaultConfig (different xpub derivation), so we gather
+        UTXOs from all monitors and build a unified signing function.
         """
         assert len(vaults) >= 1, "Need at least one vault to trigger"
 
-        # Use the first vault's metadata/config (all should share the same config)
+        # Use the first vault's metadata for persistence
         metadata = vaults[0].extra["metadata"]
         config = vaults[0].extra["config"]
-        monitor = vaults[0].extra["monitor"]
 
         # Compute total amount across all vaults
         total_amount = sum(v.amount_sats for v in vaults)
@@ -703,35 +704,45 @@ class OPVaultAdapter(VaultAdapter):
         assert withdraw_sats > 0
         dest = self.ov.PaymentDestination(fee_addr, withdraw_sats)
 
-        # Gather all vault UTXOs from chain state
-        chain_state = monitor.rescan()
-        all_vault_utxos = list(chain_state.vault_utxos.values())
-
-        # Match UTXOs to our vault set
+        # Gather vault UTXOs from each vault's own monitor (they may have
+        # different configs/addresses, so one monitor can't see them all)
         selected_utxos = []
+        vault_config_map = {}  # outpoint_str -> (config, secrets)
         for v in vaults:
-            matching = [u for u in all_vault_utxos
-                        if hasattr(u, "outpoint") and v.vault_txid in str(u.outpoint)]
-            if matching:
-                selected_utxos.append(matching[0])
+            mon = v.extra["monitor"]
+            cfg = v.extra["config"]
+            state = mon.rescan()
+            # Find this vault's UTXO
+            for outpoint_str, utxo in state.vault_utxos.items():
+                if v.vault_txid in str(outpoint_str) or v.vault_txid in str(getattr(utxo, "outpoint", "")):
+                    selected_utxos.append(utxo)
+                    secd = json.loads(cfg.secrets_filepath.read_text())[cfg.id]
+                    vault_config_map[id(utxo)] = (cfg, secd)
+                    break
             else:
-                # Fallback: closest in value
-                best = min(all_vault_utxos,
-                           key=lambda u: abs(u.value_sats - v.amount_sats))
-                selected_utxos.append(best)
-                all_vault_utxos.remove(best)
+                # Fallback: take first available UTXO from this monitor
+                utxos = list(state.vault_utxos.values())
+                if utxos:
+                    utxo = utxos[0]
+                    selected_utxos.append(utxo)
+                    secd = json.loads(cfg.secrets_filepath.read_text())[cfg.id]
+                    vault_config_map[id(utxo)] = (cfg, secd)
 
-        assert selected_utxos, "No vault UTXOs matched"
+        assert len(selected_utxos) == len(vaults), (
+            f"Could only find {len(selected_utxos)} UTXOs for {len(vaults)} vaults"
+        )
 
-        # Load trigger signing key
-        secd = json.loads(config.secrets_filepath.read_text())[config.id]
+        # Build a signing function that uses each vault's own trigger xpriv
         from bip32 import BIP32
-        trig_b32 = BIP32.from_xpriv(secd['trigger_xpriv'])
         from verystable import core
 
         def trigger_key_signer(msg: bytes, vault_num: int) -> bytes:
+            # vault_num corresponds to the index in selected_utxos
+            utxo = selected_utxos[vault_num] if vault_num < len(selected_utxos) else selected_utxos[0]
+            cfg, secd = vault_config_map.get(id(utxo), (config, json.loads(config.secrets_filepath.read_text())[config.id]))
+            trig_b32 = BIP32.from_xpriv(secd['trigger_xpriv'])
             privkey = trig_b32.get_privkey_from_path(
-                f"{config.trigger_xpub_path_prefix}/{vault_num}")
+                f"{cfg.trigger_xpub_path_prefix}/{vault_num}")
             return core.key.sign_schnorr(privkey, msg)
 
         # Refresh fee wallet — ensure mature UTXOs for the fee input
