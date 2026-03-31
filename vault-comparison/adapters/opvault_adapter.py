@@ -131,6 +131,38 @@ class OPVaultAdapter(VaultAdapter):
         # Pre-fund the fee wallet: mine blocks to its address, mature them
         self._fund_fee_wallet()
 
+        # Patch upstream get_utxo: the original checks self.utxos[0]
+        # maturity (which may be a locked/immature entry) instead of
+        # filtering to mature unlocked UTXOs first.
+        def _patched_get_utxo(wallet_self):
+            wallet_self.rescan()
+            height = wallet_self.rpc.getblockcount()
+            utxos = [
+                u for u in wallet_self.utxos
+                if u.outpoint not in wallet_self.locked_utxos
+                and (height - u.height) >= 100
+            ]
+            if not utxos:
+                raise RuntimeError(
+                    "No mature coins available; call `-generate` a few times. "
+                )
+            utxos.sort(key=lambda u: u.height)
+            utxo = utxos.pop(0)
+            wallet_self.locked_utxos.add(utxo.outpoint)
+            return utxo
+
+        import types
+        self._fee_wallet.get_utxo = types.MethodType(_patched_get_utxo, self._fee_wallet)
+
+        # Shared vault config — all vaults use the same keys with different
+        # vault_num indices. Required for batched triggers (BIP-345 requires
+        # compatible vault specs: same recovery key, same trigger xpub).
+        self._shared_metadata = self._create_config(seed + b"-shared")
+        self._shared_config = self._shared_metadata.config
+        self._shared_monitor = self.ov.ChainMonitor(
+            self._shared_metadata, self._ov_rpc
+        )
+
     # ------------------------------------------------------------------
     # Fee wallet funding
     # ------------------------------------------------------------------
@@ -138,56 +170,48 @@ class OPVaultAdapter(VaultAdapter):
     def _fund_fee_wallet(self):
         """Mine coins to the fee wallet so triggers/recoveries can pay fees."""
         fee_addr = self._fee_wallet.fee_addr
-        # Mine a few coinbases to the fee wallet
-        self._ov_rpc.generatetoaddress(5, fee_addr)
+        # Mine coinbases to the fee wallet (enough for batched operations)
+        self._ov_rpc.generatetoaddress(20, fee_addr)
         # Mature them
         self._ov_rpc.generatetoaddress(100, fee_addr)
         # Rescan so the fee wallet sees its UTXOs
         self._fee_wallet.rescan()
 
     def _ensure_fee_utxos(self, min_mature: int = 3):
-        """Ensure the fee wallet has enough mature UTXOs for upcoming operations.
+        """Ensure the fee wallet has enough mature UTXOs.
 
-        The upstream SingleAddressWallet.get_utxo() requires UTXOs with 100+
-        confirmations (coinbase maturity).  Each trigger, recovery, or revault
-        consumes one fee UTXO.  After several rapid operations the mature pool
-        is depleted — change UTXOs exist but haven't reached 100 confirmations.
-
-        This method rescans the fee wallet, counts mature UTXOs, and if below
-        `min_mature`, mines enough blocks (to the fee wallet address) to mature
-        the oldest immature coinbases.  This is the OP_VAULT equivalent of
-        CTV's _ensure_bank().
+        Clears stale locks (spent UTXOs no longer in the UTXO set),
+        then mines blocks if needed to mature immature coinbases/change.
         """
         fee_addr = self._fee_wallet.fee_addr
         self._fee_wallet.rescan()
-        height = self._ov_rpc.getblockcount()
 
-        # Count UTXOs that are mature AND not locked
-        locked = self._fee_wallet.locked_utxos
+        # Clear stale locks for spent UTXOs
+        live_outpoints = {u.outpoint for u in self._fee_wallet.utxos}
+        self._fee_wallet.locked_utxos &= live_outpoints
+
+        height = self._ov_rpc.getblockcount()
         mature = [
             u for u in self._fee_wallet.utxos
-            if u.outpoint not in locked and (height - u.height) >= 100
+            if u.outpoint not in self._fee_wallet.locked_utxos
+            and (height - u.height) >= 100
         ]
 
         if len(mature) >= min_mature:
-            return  # Plenty of mature coins available
+            return
 
-        # Find how many blocks we need to mine to mature the oldest immature
-        # unlocked UTXO.  Mine a few extra so we don't hit this path every op.
         immature = [
             u for u in self._fee_wallet.utxos
-            if u.outpoint not in locked and (height - u.height) < 100
+            if u.outpoint not in self._fee_wallet.locked_utxos
+            and (height - u.height) < 100
         ]
 
         if immature:
-            # Mine enough to mature the oldest immature UTXO, plus a buffer
             oldest = min(immature, key=lambda u: u.height)
             blocks_needed = 100 - (height - oldest.height) + 1
-            # Also mine a few fresh coinbases for good measure
             self._ov_rpc.generatetoaddress(blocks_needed + 5, fee_addr)
         else:
-            # No UTXOs at all — mine fresh coinbases and mature them
-            self._ov_rpc.generatetoaddress(5, fee_addr)
+            self._ov_rpc.generatetoaddress(10, fee_addr)
             self._ov_rpc.generatetoaddress(100, fee_addr)
 
         self._fee_wallet.rescan()
@@ -259,35 +283,34 @@ class OPVaultAdapter(VaultAdapter):
     def create_vault(self, amount_sats: int) -> VaultState:
         """Deposit funds into an OP_VAULT vault.
 
-        Creates a fresh config, mines coins to the vault deposit address,
-        then returns a VaultState handle.
+        Uses the shared VaultConfig with the next vault_num index.
+        All vaults share the same keys (required for batched triggers)
+        but have unique deposit addresses via BIP-32 derivation.
         """
         self._vault_counter += 1
+        vault_num = self._vault_counter - 1
 
-        vault_seed = self.seed + f"-vault-{self._vault_counter}".encode()
-        metadata = self._create_config(vault_seed)
-        config = metadata.config
+        config = self._shared_config
+        metadata = self._shared_metadata
+        monitor = self._shared_monitor
 
-        # Get the first deposit address
-        vault_spec = config.get_spec_for_vault_num(0)
+        # Get the deposit address for this vault_num
+        vault_spec = config.get_spec_for_vault_num(vault_num)
         deposit_addr = vault_spec.address
 
-        # Fund the vault: send coins to the deposit address
-        # Mine a coinbase, mature it, then send to vault
+        # Mine blocks to the fee wallet and mature them. This both funds
+        # the fee wallet and matures earlier change UTXOs.
         fee_addr = self._fee_wallet.fee_addr
         self._ov_rpc.generatetoaddress(1, fee_addr)
         self._ov_rpc.generatetoaddress(100, fee_addr)
         self._fee_wallet.rescan()
 
-        # Use the fee wallet to send to the vault address
-        # We'll use bitcoin-cli style sendtoaddress via raw tx construction
         deposit_txid = self._send_to_address(deposit_addr, amount_sats)
 
         # Mine to confirm
         self._ov_rpc.generatetoaddress(1, fee_addr)
 
-        # Build the chain monitor and rescan to pick up the deposit
-        monitor = self.ov.ChainMonitor(metadata, self._ov_rpc)
+        # Rescan shared monitor to pick up the new deposit
         state = monitor.rescan()
 
         return VaultState(
@@ -300,7 +323,7 @@ class OPVaultAdapter(VaultAdapter):
                 "monitor": monitor,
                 "chain_state": state,
                 "vault_spec": vault_spec,
-                "vault_seed": vault_seed,
+                "vault_seed": self.seed,
             },
         )
 
@@ -511,10 +534,19 @@ class OPVaultAdapter(VaultAdapter):
         # Rescan to get current UTXO state
         chain_state = monitor.rescan()
 
+        # Filter to the specific UTXO for this state (shared monitor
+        # sees all UTXOs under the shared config)
+        target_txid = state.vault_txid if from_vault else state.unvault_txid
         if from_vault:
-            utxos = list(chain_state.vault_utxos.values())
+            utxos = [u for u in chain_state.vault_utxos.values()
+                     if target_txid in str(getattr(u, "outpoint", ""))]
+            if not utxos:
+                utxos = list(chain_state.vault_utxos.values())[:1]
         else:
-            utxos = list(chain_state.trigger_utxos.values())
+            utxos = [u for u in chain_state.trigger_utxos.values()
+                     if target_txid in str(getattr(u, "outpoint", ""))]
+            if not utxos:
+                utxos = list(chain_state.trigger_utxos.values())[:1]
             # Also include theft triggers
             utxos.extend(chain_state.theft_trigger_utxos.keys())
 
@@ -530,7 +562,6 @@ class OPVaultAdapter(VaultAdapter):
         def recoveryauth_signer(msg: bytes) -> bytes:
             return core.key.sign_schnorr(recovery_privkey, msg)
 
-        # Refresh fee wallet — ensure mature UTXOs for the fee input
         self._ensure_fee_utxos()
 
         recovery_spec = self.ov.get_recovery_tx(
@@ -684,46 +715,47 @@ class OPVaultAdapter(VaultAdapter):
     def trigger_batched(self, vaults: List[VaultState]) -> UnvaultState:
         """Trigger multiple vault UTXOs in a single transaction.
 
-        OP_VAULT's start_withdrawal() accepts a list of VaultUtxo objects,
-        combining them into a single trigger transaction.
+        All vaults share the same VaultConfig (created in setup()), so the
+        shared monitor sees all UTXOs and start_withdrawal() accepts them
+        as compatible specs.
         """
         assert len(vaults) >= 1, "Need at least one vault to trigger"
 
-        # Use the first vault's metadata/config (all should share the same config)
-        metadata = vaults[0].extra["metadata"]
-        config = vaults[0].extra["config"]
-        monitor = vaults[0].extra["monitor"]
+        config = self._shared_config
+        metadata = self._shared_metadata
+        monitor = self._shared_monitor
 
         # Compute total amount across all vaults
         total_amount = sum(v.amount_sats for v in vaults)
 
-        # Pick a destination
         fee_addr = self._fee_wallet.fee_addr
         withdraw_sats = total_amount - 2 * self.ov.FEE_VALUE_SATS
         assert withdraw_sats > 0
         dest = self.ov.PaymentDestination(fee_addr, withdraw_sats)
 
-        # Gather all vault UTXOs from chain state
+        # Shared monitor sees all vault UTXOs under this config
         chain_state = monitor.rescan()
         all_vault_utxos = list(chain_state.vault_utxos.values())
 
-        # Match UTXOs to our vault set
+        # Match UTXOs to our vault set (remove matched to prevent duplicates)
         selected_utxos = []
         for v in vaults:
             matching = [u for u in all_vault_utxos
                         if hasattr(u, "outpoint") and v.vault_txid in str(u.outpoint)]
             if matching:
                 selected_utxos.append(matching[0])
+                all_vault_utxos.remove(matching[0])
             else:
-                # Fallback: closest in value
                 best = min(all_vault_utxos,
                            key=lambda u: abs(u.value_sats - v.amount_sats))
                 selected_utxos.append(best)
                 all_vault_utxos.remove(best)
 
-        assert selected_utxos, "No vault UTXOs matched"
+        assert len(selected_utxos) == len(vaults), (
+            f"Found {len(selected_utxos)} UTXOs for {len(vaults)} vaults"
+        )
 
-        # Load trigger signing key
+        # Shared trigger key — all vaults derive from the same xpub
         secd = json.loads(config.secrets_filepath.read_text())[config.id]
         from bip32 import BIP32
         trig_b32 = BIP32.from_xpriv(secd['trigger_xpriv'])
@@ -734,7 +766,6 @@ class OPVaultAdapter(VaultAdapter):
                 f"{config.trigger_xpub_path_prefix}/{vault_num}")
             return core.key.sign_schnorr(privkey, msg)
 
-        # Refresh fee wallet — ensure mature UTXOs for the fee input
         self._ensure_fee_utxos()
 
         # Build batched trigger
