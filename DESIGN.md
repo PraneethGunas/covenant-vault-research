@@ -433,19 +433,7 @@ Tests partial-withdrawal chaining. CTV: not supported natively — reports unsup
 No adversarial threat model — this is a cost-efficiency experiment. The data feeds into the economic rationality of recovery_griefing (defender's cost to repeatedly recover after forced re-vaults).
 
 ### E. multi_input [capability_gap, quantitative]
-Sweeps batched trigger across vault counts [1, 2, 3, 5, 10, 20, 50] to characterize the scaling curve at institutional scale. Includes ceiling analysis projecting when tx weight hits standardness (400k WU) and block (4M WU) limits. Annotates the cross-input DEDUCT accounting footgun with safe/unsafe coordinator patterns.
-
-Batching capability by covenant:
-
-| Covenant | Batching | Reason |
-|---|---|---|
-| CTV | No | Input count committed at vault creation (BIP-119) |
-| CCV | Yes | Per-input contract checking (BIP-443) |
-| OP_VAULT | Yes | Multiple compatible vault inputs per trigger (BIP-345) |
-| CAT+CSFS | No | Per-vault `sha_single_output` embedding (BIP-347) |
-| Simplicity | No | Single-vault design; language supports it |
-
-CTV and CAT+CSFS report N × single trigger cost. CCV and OP_VAULT report measured batched trigger vsizes.
+Sweeps batched trigger across vault counts [1, 2, 3, 5, 10, 20, 50] to characterize the scaling curve at institutional scale. CTV: impossible (CTV commits to input count per template), so costs are N × single_trigger. CCV: supported, with real batched trigger measurements and per-vault marginal cost regression. Includes ceiling analysis projecting when tx weight hits standardness (400k WU) and block (4M WU) limits. Annotates the cross-input DEDUCT accounting footgun with safe/unsafe coordinator patterns.
 
 No adversarial threat model — this is a cost-efficiency experiment. The DEDUCT footgun is a developer error, not an adversarial attack (see §3.5 on when threat models are omitted).
 
