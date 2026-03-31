@@ -4,7 +4,7 @@ Comparative analysis framework for CTV (BIP-119), CCV (BIP-443), OP_VAULT (BIP-3
 
 ## Overview
 
-This framework runs side-by-side experiments against four covenant vault implementations, measuring transaction costs, security properties, and capability differences. Each experiment produces on-chain measurements from regtest, not simulated or estimated values.
+This framework runs side-by-side experiments against five covenant vault implementations, measuring transaction costs, security properties, and capability differences. Each experiment produces on-chain measurements from regtest, not simulated or estimated values.
 
 The four Bitcoin covenant proposals represent fundamentally different design philosophies: CTV commits to exact transaction templates at vault creation; CCV enforces contract rules dynamically at spend time; OP_VAULT provides purpose-built vault opcodes with authorized recovery and dynamic withdrawal targets; CAT+CSFS uses generic stack introspection (OP_CAT) with signature-from-stack verification (OP_CHECKSIGFROMSTACK) to enforce vault transitions via dual-key signing. A fifth vault, built with Simplicity on Elements, serves as a reference for what covenant design looks like with full transaction introspection and no soft-fork dependency.
 
@@ -93,11 +93,11 @@ git submodule update --init --recursive
 Install Python dependencies:
 
 ```bash
-cd vault-comparison
+cd vault-comparison    # the framework subdirectory, not the repo root
 uv sync --extra all
 ```
 
-For OP_VAULT, install its dependencies separately:
+For OP_VAULT, install its dependencies separately (from the repo root):
 
 ```bash
 pip install -r simple-op-vault/requirements.txt
