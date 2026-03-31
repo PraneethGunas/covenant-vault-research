@@ -81,8 +81,8 @@ If you prefer running without Docker, clone with submodules and build the nodes 
 ### Clone
 
 ```bash
-git clone --recurse-submodules https://github.com/PraneethGunas/vault-comparison.git
-cd vault-comparison
+git clone --recurse-submodules https://github.com/PraneethGunas/covenant-vault-research.git
+cd covenant-vault-research
 
 # If already cloned without --recurse-submodules:
 git submodule update --init --recursive
@@ -90,14 +90,14 @@ git submodule update --init --recursive
 
 ### Dependencies
 
-All commands below assume you are at the repo root (`vault-comparison/`).
+All commands below assume you are at the repo root (`covenant-vault-research/`).
 
 Install the framework's Python dependencies:
 
 ```bash
-cd vault-comparison/vault-comparison   # framework subdirectory
+cd vault-comparison   # framework subdirectory
 uv sync --extra all
-cd ..                                  # back to repo root
+cd ..                 # back to repo root
 ```
 
 Install vault-specific Python dependencies:

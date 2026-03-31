@@ -35,7 +35,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:${PATH}"
 
 # Binary release base URL
-ARG RELEASE_URL=https://github.com/PraneethGunas/vault-comparison/releases/download/docker-binaries
+ARG RELEASE_URL=https://github.com/PraneethGunas/covenant-vault-research/releases/download/docker-binaries
 
 # ── Stage 2: Bitcoin Inquisition (CTV) — always pre-built ───
 FROM base AS build-inquisition
