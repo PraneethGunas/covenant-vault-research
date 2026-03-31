@@ -94,8 +94,8 @@ The foundational paper defining the Simplicity language: a typed functional lang
 
 ### [BSR25] Blockstream Research — Simplex SDK
 Blockstream Research. "Simplex: A Development Framework for Simplicity Smart Contracts." GitHub, 2025–2026.
-GitHub: https://github.com/BlockstreamResearch/simplex
-SimplicityHL compiler: https://github.com/BlockstreamResearch/simfony
+GitHub: https://github.com/BlockstreamResearch/smplx
+SimplicityHL compiler: https://github.com/BlockstreamResearch/SimplicityHL
 
 The Simplex SDK (smplx-std, smplx-sdk, smplx-regtest) provides a Rust development framework for building, testing, and deploying Simplicity programs on Elements/Liquid. Includes a CLI, local regtest environment (`simplex regtest` manages elementsd + electrs), and a signing/provider abstraction layer. SimplicityHL (formerly Simfony) is a Rust-like high-level language that compiles to Simplicity bytecode. Our `simple-simplicity-vault` is built with smplx-std 0.0.2 and SimplicityHL 0.5.0-rc.0.
 

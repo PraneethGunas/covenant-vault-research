@@ -846,7 +846,7 @@ Uses the same Bitcoin Inquisition node as CTVAdapter (`switch-node.sh inquisitio
 
 ### 5.5 SimplicityAdapter
 
-Wraps `simple-simplicity-vault/target/release/vault-cli` — a Rust CLI built with the [Simplex](https://github.com/BlockstreamResearch/simplex) SDK (smplx-std 0.0.2, simplicityhl 0.5.0-rc.0). Unlike the Bitcoin adapters which import Python modules, this adapter calls the pre-built binary via subprocess. Key mapping:
+Wraps `simple-simplicity-vault/target/release/vault-cli` — a Rust CLI built with the [Simplex](https://github.com/BlockstreamResearch/smplx) SDK (smplx-std 0.0.2, simplicityhl 0.5.0-rc.0). Unlike the Bitcoin adapters which import Python modules, this adapter calls the pre-built binary via subprocess. Key mapping:
 - `create_vault` → `vault-cli vault --amount <sats> --delay <blocks>` (funds via Elements RPC, prints TXID to stdout)
 - `trigger_unvault` → `vault-cli trigger <txid>` (hot key Schnorr signature via `jet::bip_0340_verify`)
 - `complete_withdrawal` → `vault-cli withdraw <txid>` (hot key + CSV via `jet::check_lock_distance`)
@@ -862,54 +862,73 @@ Two-key model: separate BIP-39 mnemonics for hot (trigger/withdraw) and cold (re
 
 Dependencies: `python-bitcoinlib`, `buidl`, `clii` (see `simple-cat-csfs-vault/requirements.txt`).
 
-## 6. Path Conventions
+## 6. Repository Provenance and Path Conventions
+
+### 6.1 Vault Implementations
+
+| Local directory | GitHub repo | Owner | Type | Language |
+|---|---|---|---|---|
+| `simple-ctv-vault/` | [jamesob/simple-ctv-vault](https://github.com/jamesob/simple-ctv-vault) | jamesob | Upstream (used as-is) | Python |
+| `pymatt/` | [Merkleize/pymatt](https://github.com/Merkleize/pymatt) | Merkleize | Upstream (used as-is) | Python |
+| `simple-op-vault/` | [jamesob/opvault-demo](https://github.com/jamesob/opvault-demo) | jamesob | Upstream (used as-is) | Python |
+| `simple-cat-csfs-vault/` | [PraneethGunas/cat-csfs-vault](https://github.com/PraneethGunas/cat-csfs-vault) | PraneethGunas | Original (our implementation) | Python |
+| `simple-simplicity-vault/` | [PraneethGunas/simple-simplicity-vault](https://github.com/PraneethGunas/simple-simplicity-vault) | PraneethGunas | Original (our implementation) | Rust |
+
+The three upstream repos (CTV, pymatt, OP_VAULT) are cloned as-is. Attack code for CTV is kept on branches in the local clone, not merged into master. CCV attack code lives in `pymatt/examples/vault/attacks/`. The CAT+CSFS and Simplicity vaults are our original implementations, not forks.
+
+### 6.2 Bitcoin/Elements Node Variants
+
+| Node | GitHub repo | Branch/Release | Build system |
+|---|---|---|---|
+| Bitcoin Inquisition (CTV, CAT+CSFS) | [bitcoin-inquisition/bitcoin](https://github.com/bitcoin-inquisition/bitcoin) (fork of bitcoin/bitcoin) | `v29.2-inq` release | Pre-built binary |
+| Merkleize Bitcoin (CCV) | [Merkleize/bitcoin](https://github.com/Merkleize/bitcoin) (fork of bitcoin-inquisition/bitcoin) | `inq-ccv` branch | CMake |
+| jamesob/bitcoin (OP_VAULT) | [jamesob/bitcoin](https://github.com/jamesob/bitcoin) (fork of bitcoin/bitcoin) | `2023-02-opvault-inq` branch | Autotools |
+| Elements (Simplicity) | Installed via [Simplex](https://github.com/BlockstreamResearch/smplx) toolchain (`simplexup`) | `v0.0.2` | Pre-built binary |
+
+### 6.3 Path Resolution
 
 Adapters resolve external repos relative to the vault-comparison directory:
-- CTV repo: `../../simple-ctv-vault` (relative to adapters/)
-- CCV repo: `../../pymatt` (relative to adapters/)
-- OP_VAULT repo: `../../simple-op-vault` (relative to adapters/)
-- CAT+CSFS repo: `../../simple-cat-csfs-vault` (relative to adapters/)
+- CTV: `../../simple-ctv-vault` (relative to adapters/)
+- CCV: `../../pymatt`
+- OP_VAULT: `../../simple-op-vault`
+- CAT+CSFS: `../../simple-cat-csfs-vault`
+- Simplicity: `../../simple-simplicity-vault`
 
-This means the expected workspace layout is:
+Expected workspace layout:
 ```
 research experiments/
-├── simple-ctv-vault/
-├── pymatt/
-├── simple-op-vault/
-├── simple-cat-csfs-vault/
-├── vault-comparison/
-│   ├── config.py              # FrameworkConfig, FeeConstants, load_config()
-│   ├── config.toml            # Tunable parameters
-│   ├── harness/
-│   │   ├── rpc.py             # RegTestRPC client
-│   │   ├── metrics.py         # ExperimentResult, ComparisonResult, TxMetrics
-│   │   ├── report.py          # JSON + markdown report generation
-│   │   ├── coin_pool.py       # Shared CoinPool for CTV / CAT+CSFS
-│   │   ├── module_loader.py   # UpstreamModuleLoader (sys.path isolation)
-│   │   └── logging.py         # Structured logging (structlog / stdlib)
-│   ├── adapters/
-│   ├── experiments/
-│   │   ├── experiment_base.py # ExperimentContext, shared lifecycle helpers
-│   │   └── registry.py        # @register decorator, experiment discovery
-│   └── tests/                 # pytest unit + integration tests
-├── switch-node.sh
-├── DESIGN.md
-└── REFERENCES.md
+├── simple-ctv-vault/              # Upstream: jamesob
+├── pymatt/                        # Upstream: Merkleize
+├── simple-op-vault/               # Upstream: jamesob (opvault-demo)
+├── simple-cat-csfs-vault/         # Ours: PraneethGunas/cat-csfs-vault
+├── simple-simplicity-vault/       # Ours: PraneethGunas/simple-simplicity-vault
+├── vault-comparison/              # Framework source
+│   ├── adapters/                  # Vault drivers (5 adapters)
+│   ├── experiments/               # 15 experiment modules
+│   ├── harness/                   # RPC, metrics, reporting, coin pool
+│   ├── tests/                     # pytest unit + integration
+│   ├── config.py                  # FrameworkConfig, FeeConstants
+│   └── run.py                     # CLI runner
+├── switch-node.sh                 # Node manager (Inquisition/CCV/OP_VAULT/Elements)
+├── Dockerfile                     # Multi-stage build (pre-built or from-source)
+├── DESIGN.md                      # This file
+└── REFERENCES.md                  # Prior art and citations
 ```
 
 ## 7. Node Requirements
 
-Each adapter requires a specific Bitcoin node variant:
-- CTVAdapter: Bitcoin Inquisition (`switch-node.sh inquisition`)
-- CCVAdapter: Merkleize Bitcoin with CCV (`switch-node.sh ccv`)
-- OPVaultAdapter: jamesob/bitcoin opvault branch (`switch-node.sh opvault`) — autotools build (`src/bitcoind`)
-- CATCSFSAdapter: Bitcoin Inquisition (`switch-node.sh inquisition`) — same node as CTV
+Each adapter requires a specific node variant:
+- **CTVAdapter:** Bitcoin Inquisition (`switch-node.sh inquisition`)
+- **CCVAdapter:** Merkleize Bitcoin with CCV (`switch-node.sh ccv`)
+- **OPVaultAdapter:** jamesob/bitcoin opvault branch (`switch-node.sh opvault`) — autotools build
+- **CATCSFSAdapter:** Bitcoin Inquisition (`switch-node.sh inquisition`) — same node as CTV
+- **SimplicityAdapter:** Elements via simplex regtest (`switch-node.sh elements`) — random ports, auto-discovered
 
-The runner switches nodes automatically by default. Use `--no-switch` to skip this if the node is already running.
+The runner switches nodes automatically by default. Use `--no-switch` to skip this if the node is already running. Switching wipes chain state.
 
 ## 8. Limitations of This Comparison
 
-This framework compares specific reference implementations — `simple-ctv-vault` for CTV, pymatt's vault example for CCV, `simple-op-vault` for OP_VAULT, and `simple-cat-csfs-vault` for CAT+CSFS — on Bitcoin regtest. Several caveats apply:
+This framework compares specific reference implementations — `simple-ctv-vault` for CTV, pymatt's vault example for CCV, `simple-op-vault` for OP_VAULT, `simple-cat-csfs-vault` for CAT+CSFS, and `simple-simplicity-vault` for Simplicity. The first four run on Bitcoin regtest; Simplicity runs on Elements regtest. Several caveats apply:
 
 **(a) Protocol evolution.** CTV's fee-pinning vulnerability (Experiment D) depends on the current mempool relay policy. The TRUC/v3 transaction proposal (Bitcoin Core PRs #28948, #29496) would restrict descendant chains to one transaction, eliminating the 24-descendant pinning vector demonstrated here. If TRUC is adopted, CTV's worst-case failure mode narrows to hot-key compromise alone. Similarly, address-reuse risk (Experiment B) is mitigable by wallet-layer enforcement of single-use addresses — standard Bitcoin hygiene that vault-aware wallets would be expected to implement.
 
