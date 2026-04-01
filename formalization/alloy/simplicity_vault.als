@@ -42,6 +42,9 @@ open threat_model
 
 sig OutputsHash {
   committedAddr : one Address  -- the address committed in the hash
+} {
+  -- The vault owner commits to legitimate addresses at creation time.
+  committedAddr != AttackerAddr
 }
 
 -- ============================================================

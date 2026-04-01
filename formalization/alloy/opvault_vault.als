@@ -162,8 +162,8 @@ sig OPVaultRecover extends RecoverTransition {
   -- Fee wallet input required
   feeInput in txn.inputs
   feeInput.spent = txn
-  -- Recovery goes to pre-committed address
-  -- (enforced by parent RecoverTransition → coldAddr)
+  -- Recovery destination constrained to pre-committed recovery address
+  all d : dst | d.script = family.coldAddr
 }
 
 -- ============================================================

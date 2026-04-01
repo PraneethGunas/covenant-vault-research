@@ -152,6 +152,8 @@ sig CCVRecover extends RecoverTransition {} {
   all d : dst | d in CCVRecoveredUTXO
   -- KEYLESS: explicitly NO signer required
   -- This is the griefing vector: any node can front-run trigger with recovery
+  -- Recovery destination constrained by CCV contract to cold address
+  all d : dst | d.script = family.coldAddr
 }
 
 -- ============================================================

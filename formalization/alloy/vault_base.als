@@ -90,11 +90,12 @@ abstract sig WithdrawTransition extends Transition {} {
 }
 
 -- Recovery: {VAULTED, UNVAULTING} -> RECOVERED
+-- NOTE: output destination is NOT constrained here because CAT+CSFS
+-- has unconstrained recovery (bare OP_CHECKSIG). Each concrete vault
+-- module constrains recovery destination in its own RecoverTransition subclass.
 abstract sig RecoverTransition extends Transition {} {
   src.status in (VAULTED + UNVAULTING)
   all d : dst | d.status = RECOVERED
-  -- Recovery sends to cold address
-  all d : dst | d.script = family.coldAddr
 }
 
 -- Revault: VAULTED -> (UNVAULTING, VAULTED) [partial withdrawal]

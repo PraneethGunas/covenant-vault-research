@@ -115,7 +115,8 @@ sig CTVRecover extends RecoverTransition {} {
   all d : dst | d in CTVRecoveredUTXO
   -- CTV-locked: template match suffices, no signature needed
   -- No CSV delay for recovery
-  -- Destination is cold address (enforced by parent RecoverTransition)
+  -- Destination constrained by CTV template to cold address
+  all d : dst | d.script = family.coldAddr
 }
 
 -- ============================================================

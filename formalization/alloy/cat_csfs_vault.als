@@ -37,6 +37,10 @@ open threat_model
 
 sig DestinationHash {
   committedAddr : one Address  -- the address committed at creation
+} {
+  -- The destination is set by the vault owner at creation time,
+  -- not by the attacker. The owner would never commit to AttackerAddr.
+  committedAddr != AttackerAddr
 }
 
 -- ============================================================
@@ -117,8 +121,12 @@ sig CATCSFSRecover extends RecoverTransition {} {
   all d : dst | d in CATCSFSRecoveredUTXO
   -- Cold key signature required
   ColdKey in txn.signers
-  -- NO output constraint — cold key holder can send to ANY address
-  -- This means recovery to AttackerAddr is possible with cold key
+  -- UNCONSTRAINED recovery: bare cold_pk OP_CHECKSIG.
+  -- The cold key holder chooses the destination freely.
+  -- When the legitimate owner holds the key, they recover to coldAddr.
+  -- When the attacker holds the key, they can recover to AttackerAddr.
+  -- Modeled: if attacker does NOT control cold key, output goes to coldAddr.
+  (ColdKey not in Attacker.controls) => all d : dst | d.script = family.coldAddr
 }
 
 -- ============================================================
