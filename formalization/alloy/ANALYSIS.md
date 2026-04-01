@@ -4,14 +4,16 @@
 
 ```
 alloy-models/
-├── btc_base.als        # Bitcoin UTXO model: Tx, UTXO, Key, Address, Time, CSV
-├── vault_base.als      # Abstract vault state machine: VaultUTXO, Transition, VaultFamily
-├── threat_model.als    # Attacker capabilities, key definitions, extraction predicates
-├── ctv_vault.als       # CTV (BIP-119): 3-state, no revault, address reuse model
-├── ccv_vault.als       # CCV (BIP-443): revault loop, keyless recovery, mode confusion
-├── opvault_vault.als   # OP_VAULT (BIP-345): authorized recovery, fee wallet, 3-key
-├── cross_covenant.als  # Cross-vault composition: input injection, dust termination
-└── ANALYSIS.md         # This file: scope guidance, limitations, property mapping
+├── btc_base.als           # Bitcoin UTXO model: Tx, UTXO, Key, Address, Time, CSV
+├── vault_base.als         # Abstract vault state machine: VaultUTXO, Transition, VaultFamily
+├── threat_model.als       # Attacker capabilities, key definitions, extraction predicates
+├── ctv_vault.als          # CTV (BIP-119): 3-state, no revault, address reuse model
+├── ccv_vault.als          # CCV (BIP-443): revault loop, keyless recovery, mode confusion
+├── opvault_vault.als      # OP_VAULT (BIP-345): authorized recovery, fee wallet, 3-key
+├── cat_csfs_vault.als     # CAT+CSFS (BIP-347+348): dual verification, unconstrained recovery
+├── simplicity_vault.als   # Simplicity (Elements): outputs_hash, output-constrained recovery
+├── cross_covenant.als     # Cross-vault composition: input injection, dust termination
+└── ANALYSIS.md            # This file: scope guidance, limitations, property mapping
 ```
 
 **Why this decomposition (not a flat file):**
@@ -27,11 +29,14 @@ CTV-only properties, inflating the state space unnecessarily.
 btc_base ← vault_base ← threat_model ← ctv_vault
                                        ← ccv_vault
                                        ← opvault_vault
-                                       ← cross_covenant
+                                       ← cat_csfs_vault
+                                       ← simplicity_vault
+                                       ← cross_covenant (imports ctv + ccv + opv)
 ```
 
 Each concrete vault module can be analyzed independently. The cross_covenant module
-imports all three (or uses abstract VaultFamily subtypes) for composition analysis.
+imports ctv_vault, ccv_vault, and opvault_vault for composition analysis with
+concrete covenant guards active. CAT+CSFS and Simplicity are analyzed independently.
 
 ## 2. Property-to-Assertion Mapping
 
@@ -51,6 +56,12 @@ imports all three (or uses abstract VaultFamily subtypes) for composition analys
 | 11 | Fee wallet contention | opvault_vault | `opvNoFeeContention` | COUNTEREXAMPLE |
 | 12a | Mode confusion bypass | ccv_vault | `ccvNoModeConfusionBypass` | HOLDS (closing axioms) |
 | 12b | Mode confusion contained | ccv_vault | `ccvModeConfusionContained` | COUNTEREXAMPLE |
+| 13 | CAT+CSFS cold key theft | cat_csfs_vault | `catcsfsNoExtraction_ColdKeyOnly` | COUNTEREXAMPLE (unconstrained recovery) |
+| 14 | CAT+CSFS destination lock | cat_csfs_vault | `catcsfsDestinationLock` | HOLDS (dual verification) |
+| 15 | CAT+CSFS hot key isolation | cat_csfs_vault | `catcsfsNoExtraction_HotKeyOnly` | HOLDS |
+| 16 | Simplicity output binding | simplicity_vault | `simplicityOutputBinding` | HOLDS (all paths) |
+| 17 | Simplicity cold key constrained | simplicity_vault | `simplicityNoExtraction_ColdKeyOnly` | HOLDS (output-constrained recovery) |
+| 18 | Simplicity hot key isolation | simplicity_vault | `simplicityNoExtraction_HotKeyOnly` | HOLDS |
 
 ## 3. Scope Guidance
 
@@ -107,6 +118,14 @@ RevaultTransition atoms, not by Int arithmetic. At scope 10, you get up to 10 re
 **If you need exact economics:** Don't use Alloy's Int. Instead, model value as an
 abstract ordered set with `open util/ordering[Value]` and define conservation as
 "output values partition input values." This avoids overflow entirely.
+
+**Int range caveat for splitting results:** With `5 Int` (range [-16, 15]), splitting
+results with >3 revaults approach the Int ceiling. The `dustThreshold` returns 2 and
+`minViableWithdraw` returns 3, so a deposit of value 10 supports at most 3-4 meaningful
+splits before values hit the floor. Results from `splittingTerminates` and
+`indefiniteSplitting` at >3 revaults should be interpreted with this limitation in mind.
+For higher-fidelity splitting analysis, use `6 Int` (range [-32, 31]) to provide more
+headroom, or rely on the analytical fee_sensitivity experiment for exact economics.
 
 ### 3.4 Solver choice
 
