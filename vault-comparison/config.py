@@ -21,26 +21,26 @@ class FeeConstants:
     These drive the analytical fee_sensitivity experiment and provide
     reference values for metric validation in other experiments.
     """
-    # CTV vsizes (from BIP-119 reference implementation measurements)
+    # CTV vsizes (regtest-measured via lifecycle_costs experiment)
     ctv_tovault_vsize: int = 122
-    ctv_trigger_vsize: int = 175
-    ctv_withdraw_vsize: int = 155
-    ctv_recover_vsize: int = 110
+    ctv_trigger_vsize: int = 94
+    ctv_withdraw_vsize: int = 152
+    ctv_recover_vsize: int = 133
 
-    # CCV vsizes (from pymatt vault measurements)
-    ccv_tovault_vsize: int = 135
-    ccv_trigger_vsize: int = 190
-    ccv_withdraw_vsize: int = 168
-    ccv_recover_vsize: int = 125
+    # CCV vsizes (regtest-measured via lifecycle_costs experiment)
+    ccv_tovault_vsize: int = 300
+    ccv_trigger_vsize: int = 154
+    ccv_withdraw_vsize: int = 111
+    ccv_recover_vsize: int = 122
 
-    # OP_VAULT vsizes (from BIP-345 reference)
-    opvault_tovault_vsize: int = 130
-    opvault_trigger_vsize: int = 185
-    opvault_withdraw_vsize: int = 160
-    opvault_recover_vsize: int = 115
+    # OP_VAULT vsizes (regtest-measured via lifecycle_costs experiment)
+    opvault_tovault_vsize: int = 154
+    opvault_trigger_vsize: int = 292
+    opvault_withdraw_vsize: int = 121
+    opvault_recover_vsize: int = 246
 
-    # CAT+CSFS vsizes (from simple-cat-csfs-vault measurements)
-    cat_csfs_tovault_vsize: int = 153
+    # CAT+CSFS vsizes (regtest-measured via lifecycle_costs experiment)
+    cat_csfs_tovault_vsize: int = 122
     cat_csfs_trigger_vsize: int = 221
     cat_csfs_withdraw_vsize: int = 210
     cat_csfs_recover_vsize: int = 125

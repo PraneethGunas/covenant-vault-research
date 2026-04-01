@@ -27,7 +27,7 @@ from experiments.exp_fee_sensitivity import (
     CTV_TOVAULT_VSIZE, CTV_UNVAULT_VSIZE, CTV_WITHDRAW_VSIZE,
     CCV_TOVAULT_VSIZE, CCV_TRIGGER_VSIZE, CCV_WITHDRAW_VSIZE, CCV_RECOVER_VSIZE,
     OPV_TOVAULT_VSIZE, OPV_TRIGGER_VSIZE, OPV_WITHDRAW_VSIZE, OPV_RECOVER_VSIZE,
-    CATCSFS_TRIGGER_VSIZE, CATCSFS_WITHDRAW_VSIZE, CATCSFS_RECOVER_VSIZE,
+    CATCSFS_TOVAULT_VSIZE, CATCSFS_TRIGGER_VSIZE, CATCSFS_WITHDRAW_VSIZE, CATCSFS_RECOVER_VSIZE,
 )
 
 RESULTS_DIR = Path(__file__).resolve().parents[1] / "results"
@@ -45,6 +45,7 @@ EXPECTED = {
     ("opvault", "trigger"): OPV_TRIGGER_VSIZE,
     ("opvault", "withdraw"): OPV_WITHDRAW_VSIZE,
     ("opvault", "recover"): OPV_RECOVER_VSIZE,
+    ("cat_csfs", "tovault"): CATCSFS_TOVAULT_VSIZE,
     ("cat_csfs", "trigger"): CATCSFS_TRIGGER_VSIZE,
     ("cat_csfs", "withdraw"): CATCSFS_WITHDRAW_VSIZE,
     ("cat_csfs", "recover"): CATCSFS_RECOVER_VSIZE,

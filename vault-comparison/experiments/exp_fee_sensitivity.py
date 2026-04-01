@@ -93,12 +93,12 @@ CTV_LIFECYCLE_TOTAL = CTV_TOVAULT_VSIZE + CTV_UNVAULT_VSIZE + CTV_WITHDRAW_VSIZE
 # VERIFIED against lifecycle_costs regtest measurements (results/2026-02-24_141827/).
 #
 # Key structural notes:
-#   - tovault (165 vB) is a P2TR funding tx with 2 outputs (vault + change).
-#     Larger than CTV's 122 because Taproot outputs are 34 bytes vs CTV's ~24.
-#   - trigger (154 vB) unchanged — Schnorr sig + CCV witness.
+#   - tovault (300 vB) is a P2TR funding tx (1-in/2-out: vault + change).
+#     CCV's ContractInstance creates an extra P2TR output for contract state.
+#   - trigger (154 vB) — Schnorr sig + CCV witness.
 #   - withdraw (111 vB) is the CTV-committed withdrawal after CSV (1-in/1-out).
 #   - recover (122 vB) is keyless recovery — no signature, just CCV witness.
-CCV_TOVAULT_VSIZE = 165       # P2TR funding tx (1-in/2-out: vault + change)
+CCV_TOVAULT_VSIZE = 300       # P2TR funding tx (1-in/2-out: vault + change)
 CCV_TRIGGER_VSIZE = 154       # Trigger unvault (Schnorr sig + CCV)
 CCV_WITHDRAW_VSIZE = 111      # CTV-committed withdrawal after CSV
 CCV_RECOVER_VSIZE = 122       # Keyless recovery (no sig needed)
@@ -145,43 +145,27 @@ WT_CCV_TRIGGER_VSIZE = CCV_TRIGGER_REVAULT_VSIZE  # CCV per-split trigger cost
 WT_CCV_RECOVER_VSIZE = CCV_RECOVER_VSIZE          # CCV per-split recovery cost
 WT_OPV_TRIGGER_VSIZE = OPV_TRIGGER_REVAULT_VSIZE  # OP_VAULT per-split trigger cost (292 vB)
 WT_OPV_RECOVER_VSIZE = OPV_RECOVER_VSIZE          # OP_VAULT per-split recovery cost (246 vB)
-WT_BATCHED_RECOVERY_OVERHEAD = 55             # fixed overhead for batched recovery
-WT_BATCHED_RECOVERY_PER_INPUT = 67            # CCV per-input cost in batched recovery
-# NOTE: OP_VAULT batched recovery per-input = 191 vB (from watchtower_exhaustion
-# measurement: individual 246 = 55 overhead + 191 per input).  CCV is 67 vB.
-# The difference reflects OP_VAULT's larger per-input witness (recoveryauth sig).
+WT_BATCHED_RECOVERY_OVERHEAD = 55             # estimated fixed overhead for batched recovery
+WT_BATCHED_RECOVERY_PER_INPUT = 67            # estimated CCV per-input cost in batched recovery
+# NOTE: These batched recovery constants are structural estimates derived from
+# individual recovery measurements, not measured from actual batched transactions.
+# OP_VAULT individual recovery = 246 vB (measured); decomposed as 55 overhead +
+# 191 per-input. CCV individual recovery = 122 vB; decomposed as 55 + 67.
+# The decomposition assumes N inputs → 2 outputs (cold + change).
 
 # CAT+CSFS lifecycle (simple-cat-csfs-vault)
-# 3 of 4 constants VERIFIED against regtest measurements on Inquisition node:
+# All 4 constants VERIFIED against regtest measurements on Inquisition node:
+#   - tovault (122 vB): VERIFIED via lifecycle_costs (results/2026-03-31/)
 #   - trigger (221 vB): VERIFIED via cat_csfs_hot_key_theft (results/2026-03-01_143838/)
 #   - withdraw (210 vB): VERIFIED via cat_csfs_destination_lock (results/2026-03-01_143838/)
 #   - recover (125 vB): VERIFIED via cat_csfs_cold_key_recovery (results/2026-03-01_143838/)
-# Only tovault (153 vB) is estimated — see structural derivation below.
-#
-# Key structural notes:
-#   - tovault (~153 vB) is a standard P2WPKH → P2TR spend (1-in/1-out).
-#     ESTIMATED from script structure: P2WPKH input witness ~107 bytes
-#     (sig + pubkey + push opcodes), P2TR output 34 bytes, fixed overhead
-#     ~10 bytes.  Comparable to CCV's P2TR funding (165 vB with 2 outputs);
-#     the single-output CAT+CSFS tovault should be ~12 vB smaller.
-#   - trigger (221 vB) VERIFIED: CSFS+CAT introspection leaf with dual
-#     signature verification pattern.  Larger than CCV's 154 because the
-#     witness includes prefix (94B), suffix (37B), and two signatures.
-#   - withdraw (210 vB) VERIFIED: same CSFS+CAT pattern with CSV delay.
-#     Slightly smaller than trigger because the vault-loop taptree differs.
-#   - recover (125 vB) VERIFIED: simple cold_pk OP_CHECKSIG (no introspection).
-#     Very lightweight — comparable to CCV's keyless recovery (122 vB).
-CATCSFS_TOVAULT_VSIZE = 153      # P2WPKH → P2TR — ⚠ ESTIMATED, NOT MEASURED (1-in/1-out).
-                                 # Structural basis: P2WPKH input (73B sig + 33B pubkey witness),
-                                 # P2TR output (34B), overhead (10B).  Comparable to CCV_TOVAULT
-                                 # (165 vB, 2 outputs) minus ~12 vB for single output.
-                                 # Robustness: ±33% variation does not change lifecycle ranking (Section 6).
+CATCSFS_TOVAULT_VSIZE = 122      # P2WPKH → P2TR funding tx (regtest-measured)
 CATCSFS_TRIGGER_VSIZE = 221      # CSFS+CAT trigger leaf (dual sig verification)
 CATCSFS_WITHDRAW_VSIZE = 210     # CSFS+CAT withdraw leaf (after CSV)
 CATCSFS_RECOVER_VSIZE = 125      # cold_pk OP_CHECKSIG (no introspection)
 CATCSFS_LIFECYCLE_TOTAL = CATCSFS_TOVAULT_VSIZE + CATCSFS_TRIGGER_VSIZE + CATCSFS_WITHDRAW_VSIZE
 
-# Legacy aliases for backward compat in existing analysis code
+# Default watchtower vsizes (alias to CCV — the baseline for watchtower analysis)
 WT_TRIGGER_VSIZE = WT_CCV_TRIGGER_VSIZE
 WT_RECOVER_VSIZE = WT_CCV_RECOVER_VSIZE
 
@@ -232,12 +216,11 @@ def run(adapter=None) -> ExperimentResult:
 
     # ── Estimated constant disclosure ─────────────────────────────────
     result.observe(
-        "ESTIMATED CONSTANTS: 2 of 16 vsize constants are structural estimates, "
-        "not regtest measurements: CTV_TOCOLD_VSIZE (180 vB, conservative upper "
-        "bound, structural estimate ~134 vB) and CATCSFS_TOVAULT_VSIZE (153 vB, "
-        "estimated from P2WPKH→P2TR script structure).  Both have ±33% robustness "
-        "bounds that do not change any qualitative conclusion (Section 6).  "
-        "The remaining 14 constants are VERIFIED against regtest measurements.  "
+        "ESTIMATED CONSTANTS: 1 of 16 vsize constants is a structural estimate, "
+        "not a regtest measurement: CTV_TOCOLD_VSIZE (133 vB, conservative upper "
+        "bound).  A ±33% robustness analysis (Section 6) confirms this does not "
+        "change any qualitative conclusion.  "
+        "The remaining 15 constants are VERIFIED against regtest measurements.  "
         "See results/reference/CHECKSUMS.md for canonical result checksums."
     )
 
@@ -287,14 +270,10 @@ def _section_lifecycle_costs(result):
     )
 
     result.observe(
-        "\nNOTE: 14 of 16 vsize constants are regtest-measured.  Two are "
+        "\nNOTE: 15 of 16 vsize constants are regtest-measured.  One is "
         "structurally derived: CTV_TOCOLD=" + str(CTV_TOCOLD_VSIZE) + " vB "
-        "(conservative upper bound; structural estimate ~134 vB) and "
-        "CATCSFS_TOVAULT=" + str(CATCSFS_TOVAULT_VSIZE) + " vB (from P2WPKH → "
-        "P2TR script structure).  Section 6 demonstrates that ±33% variation "
-        "in these estimates does not change any qualitative finding.  "
-        "All CAT+CSFS transaction vsizes (trigger, withdraw, recover) are "
-        "regtest-measured and verified."
+        "(conservative upper bound).  Section 6 demonstrates that ±33% variation "
+        "in this estimate does not change any qualitative finding."
     )
     result.observe(f"\nStructural vsize (deterministic):")
     result.observe(f"  CTV lifecycle:      {CTV_LIFECYCLE_TOTAL} vB "
@@ -1038,28 +1017,26 @@ def _section_robustness_bounds(result):
     """Section 6: Sensitivity analysis for unverified vsize estimates.
 
     Two constants are structurally derived rather than measured from regtest:
-      - CTV_TOCOLD_VSIZE = 180 (conservative upper bound; structural estimate ~134 vB)
-      - CATCSFS_TOVAULT_VSIZE = 153 (estimated from P2WPKH → P2TR script structure)
+      - CTV_TOCOLD_VSIZE = 133 (conservative upper bound; structural estimate ~134 vB)
 
     This section demonstrates that the paper's central finding (fee-dependent
-    ranking inversion) is robust to ±33% variation in these estimates —
+    ranking inversion) is robust to ±33% variation in this estimate —
     a range that covers the full structural uncertainty.
     """
     result.observe("")
     result.observe("=" * 70)
-    result.observe("SECTION 6: ROBUSTNESS ANALYSIS — UNVERIFIED VSIZE ESTIMATES")
+    result.observe("SECTION 6: ROBUSTNESS ANALYSIS — UNVERIFIED VSIZE ESTIMATE")
     result.observe("=" * 70)
     result.observe(
-        "Two vsize constants are structurally derived, not measured from "
-        "regtest transactions:"
+        "One vsize constant is structurally derived, not measured from "
+        "a regtest transaction:"
     )
     result.observe(
         f"  CTV_TOCOLD_VSIZE = {CTV_TOCOLD_VSIZE} vB (conservative upper bound; "
         f"structural derivation yields ~134 vB — see constant definition)"
     )
-    result.observe(f"  CATCSFS_TOVAULT_VSIZE = {CATCSFS_TOVAULT_VSIZE} vB (estimated from P2WPKH → P2TR structure)")
     result.observe(
-        "All other constants (14 of 16) are measured from regtest transactions "
+        "All other constants (15 of 16) are measured from regtest transactions "
         "and verified stable across multiple runs (see watchtower_exhaustion "
         "vsize stability checks and lifecycle_costs measurements)."
     )
@@ -1073,8 +1050,8 @@ def _section_robustness_bounds(result):
     )
     result.observe(
         "\nWe test whether the central findings are robust to ±33% variation "
-        "in these two estimates — a range that covers the full structural "
-        "uncertainty (from the derived 134 vB to a generous 240 vB for CTV_TOCOLD)."
+        "in this estimate — a range that covers the full structural "
+        "uncertainty (from the derived 134 vB to a generous 177 vB for CTV_TOCOLD)."
     )
 
     # ── CTV_TOCOLD sensitivity ──────────────────────────────────────
@@ -1108,36 +1085,12 @@ def _section_robustness_bounds(result):
         "The cost asymmetry direction is preserved across all variations."
     )
 
-    # ── CATCSFS_TOVAULT sensitivity ─────────────────────────────────
-    result.observe("\n--- CATCSFS_TOVAULT_VSIZE sensitivity (affects lifecycle cost) ---")
+    # ── CATCSFS_TOVAULT — now measured ──────────────────────────────
     result.observe(
-        "CATCSFS_TOVAULT affects Section 1 (lifecycle cost ranking).  "
-        f"Current lifecycle total: {CATCSFS_LIFECYCLE_TOTAL} vB."
-    )
-
-    for variation_pct in [-33, -20, -10, 0, 10, 20, 33]:
-        varied = int(CATCSFS_TOVAULT_VSIZE * (1 + variation_pct / 100))
-        varied_lifecycle = varied + CATCSFS_TRIGGER_VSIZE + CATCSFS_WITHDRAW_VSIZE
-        cheapest = min(CTV_LIFECYCLE_TOTAL, CCV_LIFECYCLE_TOTAL,
-                       OPV_LIFECYCLE_TOTAL, varied_lifecycle)
-        rank_label = (
-            "CTV cheapest" if cheapest == CTV_LIFECYCLE_TOTAL else
-            "CCV cheapest" if cheapest == CCV_LIFECYCLE_TOTAL else
-            "OPV cheapest" if cheapest == OPV_LIFECYCLE_TOTAL else
-            "CATCSFS cheapest"
-        )
-        result.observe(
-            f"  {variation_pct:+3d}%: tovault={varied} vB, "
-            f"lifecycle={varied_lifecycle} vB, {rank_label} "
-            f"(CTV={CTV_LIFECYCLE_TOTAL}, CCV={CCV_LIFECYCLE_TOTAL}, "
-            f"OPV={OPV_LIFECYCLE_TOTAL})"
-        )
-
-    result.observe(
-        "  CONCLUSION: CATCSFS_TOVAULT variation of ±33% does not change the "
-        "lifecycle cost ranking. CTV remains the cheapest lifecycle; CAT+CSFS "
-        "remains more expensive than CCV due to the CSFS+CAT witness overhead "
-        "in trigger (221 vB) and withdraw (210 vB)."
+        f"\nNote: CATCSFS_TOVAULT_VSIZE was previously estimated at 153 vB. "
+        f"It is now regtest-measured at {CATCSFS_TOVAULT_VSIZE} vB "
+        f"(lifecycle_costs, 2026-03-31). The robustness analysis for this "
+        "constant is no longer needed."
     )
 
     # ── Crossover point robustness ──────────────────────────────────
@@ -1149,19 +1102,18 @@ def _section_robustness_bounds(result):
         "which are ALL MEASURED, not estimated."
     )
     result.observe(
-        "Neither CTV_TOCOLD nor CATCSFS_TOVAULT affects the crossover point, "
+        "CTV_TOCOLD does not affect the crossover point, "
         "because the crossover is driven by watchtower exhaustion economics "
         "(splits_to_exhaust = vault_amount / (recover_vsize × fee_rate)), "
         "which uses only measured CCV/OP_VAULT vsizes."
     )
     result.observe(
-        "ROBUSTNESS VERDICT: The two structurally derived constants affect only: "
-        "(1) CTV griefing defender cost (CTV_TOCOLD — bounded at ≤152 vB from "
-        "tohot comparison, conservative 180 vB used) and "
-        "(2) CAT+CSFS lifecycle cost ranking (CATCSFS_TOVAULT). "
-        "Neither affects the paper's central finding (fee-dependent "
+        "ROBUSTNESS VERDICT: The one structurally derived constant affects only "
+        "CTV griefing defender cost (CTV_TOCOLD — bounded at ≤152 vB from "
+        "tohot comparison, conservative 133 vB used). "
+        "It does not affect the paper's central finding (fee-dependent "
         "crossover). The crossover is determined entirely by measured vsizes.  "
-        "Both constants are robust to ±33% variation — well beyond any "
+        "CTV_TOCOLD is robust to ±33% variation — well beyond any "
         "structural uncertainty — without changing qualitative conclusions."
     )
 
@@ -1185,7 +1137,7 @@ def _section_robustness_bounds(result):
         ("OPV_TRIGGER_VSIZE", OPV_TRIGGER_VSIZE, "lifecycle_costs regtest (opvault node)"),
         ("OPV_WITHDRAW_VSIZE", OPV_WITHDRAW_VSIZE, "lifecycle_costs regtest (opvault node)"),
         ("OPV_RECOVER_VSIZE", OPV_RECOVER_VSIZE, "recovery_griefing regtest (opvault node)"),
-        ("CATCSFS_TOVAULT_VSIZE", CATCSFS_TOVAULT_VSIZE, "ESTIMATED — P2WPKH→P2TR structure, pending"),
+        ("CATCSFS_TOVAULT_VSIZE", CATCSFS_TOVAULT_VSIZE, "lifecycle_costs regtest (Inquisition)"),
         ("CATCSFS_TRIGGER_VSIZE", CATCSFS_TRIGGER_VSIZE, "cat_csfs_hot_key_theft regtest (Inquisition)"),
         ("CATCSFS_WITHDRAW_VSIZE", CATCSFS_WITHDRAW_VSIZE, "cat_csfs_destination_lock regtest (Inquisition)"),
         ("CATCSFS_RECOVER_VSIZE", CATCSFS_RECOVER_VSIZE, "cat_csfs_cold_key_recovery regtest (Inquisition)"),

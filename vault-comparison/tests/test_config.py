@@ -26,7 +26,7 @@ def test_fee_constants_for_covenant():
     assert "trigger" in ctv
     assert "withdraw" in ctv
     assert "recover" in ctv
-    assert ctv["trigger"] == 175
+    assert ctv["trigger"] == 94
 
 
 def test_fee_constants_for_cat_csfs():
