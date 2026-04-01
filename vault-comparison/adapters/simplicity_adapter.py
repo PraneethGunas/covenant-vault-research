@@ -388,6 +388,7 @@ class SimplicityAdapter(VaultAdapter):
     @staticmethod
     def _extract_elements_fee(tx_info: dict) -> int:
         """Extract explicit fee from an Elements transaction."""
+        from decimal import Decimal
         fee_sats = 0
         for vout in tx_info.get("vout", []):
             spk = vout.get("scriptPubKey", {})
@@ -396,7 +397,7 @@ class SimplicityAdapter(VaultAdapter):
             ):
                 value = vout.get("value", 0)
                 try:
-                    fee_sats += int(float(value) * 100_000_000)
-                except (TypeError, ValueError):
+                    fee_sats += int(Decimal(str(value)) * 100_000_000)
+                except Exception:
                     pass
         return fee_sats
