@@ -10,7 +10,7 @@ specifies OP_SUCCESS semantics — the script succeeds unconditionally
 with zero covenant enforcement.  This is deliberate forward-compatibility
 behavior enabling future soft-fork extensions, NOT a bug or vulnerability.
 
-The CCVWildSpend transition model describes the consequence: a vault UTXO
+The CCV OP_SUCCESS bypass transition model describes the consequence: a vault UTXO
 consumed with zero typed outputs, funds redirected to attacker-controlled
 UTXOs.  No vault developer using the pymatt library would accidentally
 trigger this — the library exposes named constants (CCV_FLAG_CHECK_INPUT,
@@ -36,7 +36,7 @@ succeed validation immediately."  Ingala [Ing23] documented this as a
 deliberate design decision for soft-fork safety.  exp_ccv_edge_cases
 tests this with a minimal single-leaf contract.  This experiment validates
 the behavior against a full vault taptree structure and documents the
-CCVWildSpend transition model as a developer education contribution.
+CCV OP_SUCCESS bypass transition model as a developer education contribution.
 """
 
 import sys
@@ -395,7 +395,7 @@ def _run_bypass_experiment(adapter, result, mods):
             "using an undefined mode value."
         )
         result.observe(
-            "CCVWildSpend transition model: vault UTXO → zero typed outputs "
+            "CCV OP_SUCCESS bypass transition model: vault UTXO → zero typed outputs "
             "→ funds into untyped attacker-controlled UTXOs.  No signature "
             "required, no output validation, no amount checking.  This "
             "documents the CONSEQUENCE of the footgun, not a vulnerability."
@@ -405,7 +405,7 @@ def _run_bypass_experiment(adapter, result, mods):
             "BIP-443 [Ing23] as a deliberate consensus design choice.  "
             "Ingala documented the forward-compatibility rationale.  Our "
             "contribution is the systematic sweep across 5 undefined modes "
-            "on a production-shaped vault taptree and the CCVWildSpend "
+            "on a production-shaped vault taptree and the CCV OP_SUCCESS bypass "
             "transition model as developer education material."
         )
     elif bypass_accepted > 0:

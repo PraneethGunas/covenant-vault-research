@@ -40,7 +40,7 @@ The conceptual contribution is a *unified measurement framework* that reveals ho
 3. **The two-dimensional security tradeoff space.** Griefing resistance and fund safety under key loss are anti-correlated across the CTV/CCV/OP_VAULT triple: OP_VAULT > CTV > CCV for griefing resistance, CCV > CTV > OP_VAULT for key-loss safety. This clean anti-correlation holds because stronger recovery authorization reduces griefing surface but increases the damage from key compromise — a necessary design tradeoff, not an implementation artifact. However, the four-way comparison reveals that the tradeoff space is **two-dimensional**, not single-axis. CAT+CSFS occupies a distinct position: strongest hot-key theft resistance (dual CSFS+CHECKSIG prevents fund redirection, limiting attackers to griefing-only) but weakest cold-key recovery safety (unconstrained OP_CHECKSIG = immediate theft). This means CAT+CSFS does not fit on the CTV/CCV/OP_VAULT ranking axis — it represents a different design philosophy (introspection-based vs. opcode-based covenants) that trades cold-key safety for hot-key robustness. The two dimensions are: (a) griefing resistance vs. fund safety under key loss (the CTV/CCV/OP_VAULT axis), and (b) hot-key attack surface vs. cold-key attack surface (where CAT+CSFS diverges). A practitioner choosing between designs must consider both dimensions relative to their threat model.
 
 4. **Empirical confirmation of prior estimates and first complete vsize measurements.** Harding's [Har24] ~3,000 chunks/block estimate is confirmed for OP_VAULT (measured: 3,427 splits/block at trigger_and_revault weight ~1,168 WU). For CCV, the smaller trigger_and_revault transaction (162 vB vs OP_VAULT's 292 vB) yields approximately 6,172 splits/block — roughly 80% more than OP_VAULT, because Harding's analysis assumed OP_VAULT-sized transactions. This work provides the first empirically measured vsize data for all four covenant lifecycles — no prior work or BIP specification published concrete transaction size figures.
-5. **CCVWildSpend: developer footgun documentation via OP_SUCCESS (TM8).** The OP_SUCCESS behavior for undefined CCV mode values is **specified consensus behavior** in BIP-443, deliberately designed for forward-compatible soft-fork extensions. Ingala [Ing23] documented this as a design decision. No vault developer using the pymatt library would accidentally trigger this — the library exposes named constants that prevent misuse. Our contribution is (a) the `CCVWildSpend` transition model documenting the *consequence* of the footgun — a vault UTXO consumed with zero typed outputs, funds redirected to attacker-controlled UTXOs; (b) systematic mode sweep confirming all undefined values (3, 4, 7, 128, 255) produce complete covenant bypass on a production-shaped taptree; (c) developer education: the boundary between defined and undefined modes is at the enumeration edge ({-1,0,1,2} are defined; all others trigger OP_SUCCESS), not at a bitmask boundary. **Verified via `exp_ccv_mode_bypass` on CCV regtest (2026-02-22).** All 5 undefined modes confirmed: covenant bypass on each, 110 vB per spend.
+5. **CCV OP_SUCCESS bypass: developer footgun documentation via OP_SUCCESS (TM8).** The OP_SUCCESS behavior for undefined CCV mode values is **specified consensus behavior** in BIP-443, deliberately designed for forward-compatible soft-fork extensions. Ingala [Ing23] documented this as a design decision. No vault developer using the pymatt library would accidentally trigger this — the library exposes named constants that prevent misuse. Our contribution is (a) the `CCV OP_SUCCESS bypass` transition model documenting the *consequence* of the footgun — a vault UTXO consumed with zero typed outputs, funds redirected to attacker-controlled UTXOs; (b) systematic mode sweep confirming all undefined values (3, 4, 7, 128, 255) produce complete covenant bypass on a production-shaped taptree; (c) developer education: the boundary between defined and undefined modes is at the enumeration edge ({-1,0,1,2} are defined; all others trigger OP_SUCCESS), not at a bitmask boundary. **Verified via `exp_ccv_mode_bypass` on CCV regtest (2026-02-22).** All 5 undefined modes confirmed: covenant bypass on each, 110 vB per spend.
 
 The per-experiment relationship to prior work is detailed in `REFERENCES.md` §2.
 
@@ -364,6 +364,7 @@ All experiments run on Bitcoin Core regtest.  This is a deliberate methodologica
 - Timing of recovery races (instant mining eliminates real-world latency)
 - Mempool front-running dynamics (no competing traffic)
 - Fee market pressure on transaction confirmation
+- CSV timelock manipulation via mining influence (time-dilation attacks, where an attacker with hash power withholds blocks to compress the watchtower's response window, are not modeled)
 
 **Per-experiment impact:**
 
@@ -500,9 +501,9 @@ Tests the revault splitting attack described by halseth in the OP_VAULT discussi
 - Residual risk: Identical structure to CCV — at high fees, watchtower rationally abandons dust UTXOs. Higher per-recovery cost means the threshold is reached sooner than CCV.
 
 ### I. ccv_mode_bypass [ccv_only, verification, developer_footguns]
-Empirical verification that BIP-443's OP_SUCCESS behavior for undefined CCV mode values applies to production-shaped vault taptrees. Constructs a `VulnerableVault` with the same taptree structure as pymatt's production `Vault` (trigger + recover leaves), but the recover leaf's CCV uses a mode value outside the defined enumeration {-1, 0, 1, 2}. The OP_SUCCESS behavior is **specified consensus behavior** in BIP-443: "Any other value of the mode makes the opcode succeed validation immediately." This is a deliberate forward-compatibility mechanism, not a vulnerability. The experiment documents the CCVWildSpend transition model (vault UTXO → zero typed outputs → attacker-controlled UTXOs) as developer education — the pymatt library's typed constants prevent this in practice.
+Empirical verification that BIP-443's OP_SUCCESS behavior for undefined CCV mode values applies to production-shaped vault taptrees. Constructs a `VulnerableVault` with the same taptree structure as pymatt's production `Vault` (trigger + recover leaves), but the recover leaf's CCV uses a mode value outside the defined enumeration {-1, 0, 1, 2}. The OP_SUCCESS behavior is **specified consensus behavior** in BIP-443: "Any other value of the mode makes the opcode succeed validation immediately." This is a deliberate forward-compatibility mechanism, not a vulnerability. The experiment documents the CCV OP_SUCCESS bypass transition model (vault UTXO → zero typed outputs → attacker-controlled UTXOs) as developer education — the pymatt library's typed constants prevent this in practice.
 
-- Outcome is predetermined by BIP-443. The experiment confirms the spec holds on production-shaped contracts and provides the CCVWildSpend transition model for developer documentation.
+- Outcome is predetermined by BIP-443. The experiment confirms the spec holds on production-shaped contracts and provides the CCV OP_SUCCESS bypass transition model for developer documentation.
 - Sweep: 5 undefined modes (3, 4, 7, 128, 255), all produce covenant bypass. Bypass spend: 110 vB.
 - **Verified on CCV regtest (2026-02-22).**
 
@@ -594,6 +595,7 @@ Tests the unconstrained recovery path and cold key compromise. Phase 1 measures 
 This matrix synthesizes the per-experiment threat models into a four-way comparison across all attack classes (Bitcoin covenants). Each row (TM1–TM11) corresponds to a distinct adversary profile. The "Measured vsize" column uses empirically verified values from regtest runs (see §4.2 for verification methodology). TM8 (CCV mode bypass) is empirically verified via `exp_ccv_mode_bypass` (2026-02-22).
 
 **Simplicity mapping** (not included in the matrix columns — separate chain, separate threat model):
+The Simplicity vault runs on Elements/Liquid, a federated sidechain where block production is controlled by known functionaries. This fundamentally changes the threat model: functionaries could censor attacker transactions (making griefing, fee pinning, and watchtower exhaustion moot) or collude with an attacker (making all covenant enforcement irrelevant). The mappings below assume honest federation behavior and evaluate only covenant-level properties:
 The Simplicity vault on Elements maps to the following TM entries:
 - TM1 (fee pinning): **N/A** — explicit fee outputs, no anchor outputs, no descendant-chain pinning vector.
 - TM2 (recovery griefing): **LOW** — cold key required for recovery (like CAT+CSFS), but recovery is output-constrained (unlike CAT+CSFS). Cost: ~286 vB/round.
@@ -690,7 +692,7 @@ TM  Attack class              CTV                         CCV                   
                                                           validation.  A mode value
                                                           outside {-1,0,1,2} in raw
                                                           CCV scripts → complete fund
-                                                          loss.  CCVWildSpend:
+                                                          loss.  CCV OP_SUCCESS bypass:
                                                           vault UTXO → arbitrary
                                                           attacker-controlled
                                                           outputs.
@@ -746,6 +748,14 @@ TM  Attack class              CTV                         CCV                   
 
 CTV's "conditional" hot-key safety depends on relay policy (TRUC/v3 would eliminate TM1). CCV's "moderate" reflects keyless griefing (TM2/TM4) and the OP_SUCCESS risk from undefined modes (TM8). OP_VAULT's "high complexity" reflects three-key management and recoveryauth key-loss risk. CAT+CSFS's "highest" hot-key safety reflects the dual-verification binding (TM9), but its "low" cold-key safety reflects unconstrained recovery (TM11). Simplicity matches CAT+CSFS on hot-key safety (`outputs_hash` enforcement) but has "high" cold-key safety because recovery is output-constrained — the key distinction from CAT+CSFS. Simplicity's "moderate" complexity reflects the two-key model (simpler than OP_VAULT's three keys) but on a federated sidechain with different trust assumptions.
 
+**Threats not modeled.** The following threat classes apply equally to all vault designs and are orthogonal to the covenant-specific properties measured in TM1–TM11:
+
+- **Mining-level attacks** (51% hash power, selfish mining, block withholding). An attacker with mining influence could compress CSV timelocks by withholding blocks, reducing the watchtower's response window. This interacts with TM3 (trigger key theft) and TM4 (watchtower exhaustion) but is not covenant-specific.
+- **Network-level attacks** (eclipse, Sybil, partition). An eclipse attack could prevent a watchtower from observing unvault transactions, giving the attacker a head start on the CSV timelock race.
+- **Watchtower availability** (DDoS, geographic isolation, software failure). All time-locked vault designs assume an online watchtower during the CSV window. Watchtower failure modes are a deployment concern, not a covenant design property.
+- **Multisig key management** (threshold schemes, key recovery latency, signing coordination). Production vaults would use multisig (e.g., 2-of-3 cold keys). The interaction between key threshold schemes and covenant enforcement is not addressed.
+- **Dust limit changes.** The watchtower exhaustion analysis (§H) assumes current dust limits (~546 sats). Changes to dust relay policy would shift the economic floor at which splits become unrecoverable.
+
 ### 4.2 OP_VAULT Vsize Measurements
 
 The fee_sensitivity experiment (§J) uses structural vsize constants for economic projection. All OP_VAULT values are empirically measured on regtest from lifecycle_costs, recovery_griefing, and watchtower_exhaustion runs (results/2026-02-21_143950/).
@@ -800,6 +810,8 @@ Total lifecycle: 865 vB (tovault + trigger + withdraw)
 **Why Simplicity transactions are larger:** The Simplicity witness encodes a pruned program DAG in a bit-oriented format, including the executed branch's combinators and jet references. This is more expressive than Bitcoin Script (full transaction introspection, typed functional language) but produces larger witnesses. The 298 vB trigger/withdraw each contain: a BIP-340 Schnorr signature (64 bytes), the Simplicity program's Merkle proof, and the serialized witness data — all bit-packed.
 
 **Elements-specific:** Each transaction has exactly two outputs (spend + explicit fee). The `tovault` transaction is a standard Elements wallet `sendtoaddress` (not a Simplicity spend), which includes a change output (3 outputs total). The explicit fee output (empty scriptPubKey) replaces Bitcoin's implicit fee model.
+
+**Elements serialization overhead.** Elements transactions include confidential transaction fields (asset ID, value commitment, nonce) even in non-confidential mode, adding ~30–40 bytes per output compared to Bitcoin's native serialization. A hypothetical Bitcoin-native Simplicity implementation would produce smaller transactions. The vsize difference between Simplicity (865 vB lifecycle) and the Bitcoin covenants (367–567 vB) reflects both Simplicity's larger witness format and Elements' serialization overhead — these two factors cannot be separated without a shared chain.
 
 ## 5. Adapter Details
 
@@ -887,6 +899,13 @@ Dependencies: `python-bitcoinlib`, `buidl`, `clii` (see `simple-cat-csfs-vault/r
 | `simple-simplicity-vault/` | [PraneethGunas/simple-simplicity-vault](https://github.com/PraneethGunas/simple-simplicity-vault) | PraneethGunas | Original (our implementation) | Rust |
 
 The three upstream repos (CTV, pymatt, OP_VAULT) are cloned as-is. Attack code for CTV is kept on branches in the local clone, not merged into master. CCV attack code lives in `pymatt/examples/vault/attacks/`. The CAT+CSFS and Simplicity vaults are our original implementations, not forks.
+
+**Implementation choices in author implementations.** Since CAT+CSFS and Simplicity are our own code (not upstream), implementation bugs in these two are not distinguishable from design limitations without explicit documentation. The following design choices are implementation decisions, not BIP requirements:
+
+- **CAT+CSFS fixed destination**: The withdrawal destination is embedded as a script constant (`sha_single_output`). Poelstra's dynamic-destination design [Poe21] is an alternative that trades rigidity for flexibility. Experiment O measures this tradeoff.
+- **CAT+CSFS unconstrained cold key recovery**: The recover leaf uses bare `cold_pk OP_CHECKSIG` with no output constraints. An output-constrained recovery (like Simplicity's) is possible but was not implemented. Experiment P measures the security implications.
+- **Simplicity fixed fee (500 sats)**: The `TX_FEE_SATS` constant is an implementation simplification. Elements regtest has no fee market, so dynamic fee estimation is unnecessary.
+- **CTV anchor output (3300 sats)**: The upstream `simple-ctv-vault` uses a 3300-sat anchor output to support a 25-descendant CPFP chain. This is an implementation choice, not a BIP-119 requirement — different anchor sizes produce different fee pinning economics.
 
 ### 6.2 Bitcoin/Elements Node Variants
 

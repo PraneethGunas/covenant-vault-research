@@ -158,7 +158,7 @@ sig CCVRecover extends RecoverTransition {} {
 -- WildSpend: unstructured spending via OP_SUCCESS (mode confusion)
 -- (Fix R2-3: models the fact that OP_SUCCESS bypasses all covenant checks)
 -- ============================================================
-sig CCVWildSpend extends Transition {} {
+sig CCVModeBypassed extends Transition {} {
   -- Source must be a CCV vault UTXO with mode confusion
   src in CCVVaultUTXO
   modeConfusion[(src :> CCVVaultUTXO).contract]
@@ -352,7 +352,7 @@ assert ccvNoModeConfusionBypass {
 -- into plain (non-vault) UTXOs the attacker controls.
 assert ccvModeConfusionContained {
   -- No WildSpend transition exists (i.e., mode confusion never enables wild spending)
-  no CCVWildSpend
+  no CCVModeBypassed
 }
 
 -- ============================================================
