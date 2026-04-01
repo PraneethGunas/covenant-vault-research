@@ -169,6 +169,11 @@ def _sweep_linear(adapter, result, rpc, vault_counts):
     single_fee = single_metrics.fee_sats
 
     result.observe(f"Single trigger baseline: vsize={single_vsize}, fee={single_fee} sats")
+    result.observe(
+        f"NOTE: {covenant.upper()} cannot combine multiple vault triggers in one "
+        "transaction. All N>1 entries below are extrapolated (N × single_trigger_vsize), "
+        "not measured from actual multi-input transactions."
+    )
     result.observe(BATCHING_NOTES.get(covenant, BATCHING_NOTES["ctv"]))
 
     # Record extrapolated data points
@@ -210,6 +215,15 @@ def _sweep_batched(adapter, result, rpc, vault_counts):
     """
     covenant = adapter.name
     result.observe(f"--- {covenant.upper()} batching sweep (real batched triggers) ---")
+
+    caps = adapter.capabilities()
+    if caps.get("batched_trigger_requires_precoordination"):
+        result.observe(
+            f"NOTE: {covenant.upper()} batching requires pre-coordination at vault "
+            "creation time (all vaults share a single trigger_outputs_hash). "
+            "Unlike CCV/OP_VAULT, independently-created vaults cannot be batched — "
+            "this is a structural constraint of output-hash covenants."
+        )
 
     from harness.metrics import TxMetrics
 

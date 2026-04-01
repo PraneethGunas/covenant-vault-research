@@ -63,7 +63,7 @@ VAULT_AMOUNT = 49_999_900
 @register(
     name="cat_csfs_destination_lock",
     description="CAT+CSFS destination lock: inflexible withdrawal target analysis",
-    tags=["cat_csfs_only", "security", "configuration"],
+    tags=["cat_csfs_only", "design_property", "configuration"],
     required_covenants=["cat_csfs"],
 )
 def run(adapter: VaultAdapter) -> ExperimentResult:

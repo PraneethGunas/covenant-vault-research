@@ -272,8 +272,11 @@ def _test_opvault_address_reuse(adapter, result):
     result.observe(
         "OP_VAULT uses P2TR addresses derived from the vault config "
         "(recovery pubkey, recoveryauth pubkey, trigger xpub, spend delay).  "
-        "Each deposit to a vault address creates an independent UTXO that "
-        "the ChainMonitor discovers via rescan."
+        "BIP-345 validates vault constraints at spend time (OP_VAULT checks "
+        "the CTV template against the trigger output), not at deposit time.  "
+        "Address reuse safety is a design property of BIP-345, not an "
+        "implementation choice — ChainMonitor is the reference implementation's "
+        "UTXO discovery mechanism."
     )
 
     # First vault — creates a unique config

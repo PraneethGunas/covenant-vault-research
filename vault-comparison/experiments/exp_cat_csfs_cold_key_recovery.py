@@ -40,7 +40,8 @@ experiment models the cost of that alternative design.
 
 === THREAT MODEL: Cold key compromise ===
 Attacker: Has the cold key.  Goal: steal all vault funds immediately.
-Severity: CRITICAL for all vault designs.
+Severity: HIGH for all vault designs (cold keys are typically offline/air-gapped,
+  making compromise difficult but catastrophic when it occurs).
 CAT+CSFS specific: The attacker broadcasts sign_recover() with a
   modified output (attacker address).  Since the recover leaf is just
   OP_CHECKSIG with SIGHASH_DEFAULT, the cold key holder controls where
