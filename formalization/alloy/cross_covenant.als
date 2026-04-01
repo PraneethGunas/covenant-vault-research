@@ -2,47 +2,37 @@
  * cross_covenant.als — Cross-Covenant Composition Analysis
  *
  * Models interactions between different vault types co-existing on
- * the same blockchain. These are the unexplored properties:
+ * the same blockchain. Imports ALL concrete vault modules to ensure
+ * covenant guards are active (not abstract).
  *
- * 1. Cross-vault interaction: Can a CTV unvault tx consume a CCV
- *    vault UTXO as an additional input? (CTV doesn't commit to
- *    input prevouts.)
- *
- * 2. Fee wallet contention: Shared fee wallet across OP_VAULT
- *    instances creates resource contention.
- *
- * 3. Revault-to-dust termination: Does the splitting attack reach
- *    a fixed point at the dust threshold (546 sats)?
+ * Properties modeled:
+ * 1. Cross-vault input injection: CTV trigger tx consuming a CCV vault
+ *    UTXO as an additional input (CTV doesn't commit to input prevouts).
+ * 2. Fee wallet contention: shared fee wallet across OP_VAULT instances.
+ * 3. Revault-to-dust termination: splitting attack fixed point.
  */
 module cross_covenant
 
 open btc_base
 open vault_base
 open threat_model
--- Note: for full cross-vault analysis with concrete types, also open:
--- open ctv_vault
--- open ccv_vault
--- open opvault_vault
--- Kept abstract here to avoid pulling in all three vault models simultaneously,
--- which inflates the SAT search space. Use concrete imports when checking
--- specific cross-vault properties.
+open ctv_vault
+open ccv_vault
+open opvault_vault
 
 -- ============================================================
 -- PROPERTY 9: Cross-vault input injection
 -- ============================================================
--- CTV does not commit to input prevouts. This means a CTV-locked
--- transaction can consume *any* set of inputs, as long as the
--- outputs match the template.
---
--- Attack scenario: Attacker creates a CTV unvault transaction
--- that includes, as an additional input, a UTXO from a CCV vault.
--- Since CTV only checks outputs, the CCV UTXO is consumed without
--- CCV covenant checks (those checks only fire on the CCV spend path).
+-- CTV does not commit to input prevouts (BIP-119 §4). A CTV-locked
+-- transaction can consume ANY set of inputs as long as outputs match
+-- the template. If a CCV vault UTXO is included as an additional input,
+-- and the CCV spending conditions happen to be satisfied (e.g., via
+-- mode confusion or keypath bypass), funds from both vaults are consumed.
 
--- A transaction that consumes inputs from different vault families
+-- A transaction consuming inputs from different vault families
 sig CrossVaultTx extends Tx {
-  ctvInput  : one VaultUTXO,   -- input governed by CTV
-  extraInput : one VaultUTXO   -- input from a different vault type
+  ctvInput   : one CTVVaultedUTXO,  -- input governed by CTV
+  extraInput : one CCVVaultUTXO     -- input from a CCV vault
 } {
   ctvInput in inputs
   extraInput in inputs
@@ -50,140 +40,109 @@ sig CrossVaultTx extends Tx {
   ctvInput.vaultFamily != extraInput.vaultFamily
 }
 
--- Can a CTV unvault tx pull in a CCV vault UTXO?
+-- Can a CTV trigger tx pull in a CCV vault UTXO?
+-- For this to work, the CCV UTXO must be spendable. This requires either:
+-- (a) Mode confusion: CCV uses undefined mode → OP_SUCCESS bypasses checks
+-- (b) Keypath bypass: CCV contract uses real pubkey instead of NUMS
 pred crossInputInjection {
   some t : CrossVaultTx |
-    -- The CTV input is a CTVVaultedUTXO being unvaulted
-    -- The extra input is from a CCV vault
-    -- CTV doesn't check what the extra input is
     t.ctvInput.status = VAULTED and
     t.extraInput.status = VAULTED and
-    -- The extra input's value flows to the attacker
-    -- (because CTV only constrains outputs, not input-output binding)
-    t.ctvInput.vaultFamily != t.extraInput.vaultFamily
-}
-
--- Analysis predicate: in what scenarios does this actually work?
--- The CCV UTXO has its own spending conditions (taptree).
--- For the cross-input attack to succeed:
--- 1. The CCV UTXO must be spendable without CCV checks
---    (only possible if mode confusion / keypath bypass applies)
--- 2. OR the transaction satisfies BOTH the CTV template AND
---    the CCV spending conditions simultaneously
-pred viableCrossInjection {
-  some t : CrossVaultTx |
-    -- CTV template is satisfied (outputs match)
-    -- AND CCV spending conditions are met on the extra input
-    -- This requires the CCV input's spend path to be satisfied
-    -- OR the CCV input has a vulnerability (mode confusion, keypath)
-    t.ctvInput.vaultFamily != t.extraInput.vaultFamily and
-    t.ctvInput.status = VAULTED and
-    t.extraInput.status = VAULTED
+    -- The CCV input has a vulnerability allowing it to be spent
+    -- without proper CCV covenant enforcement
+    (some c : t.extraInput.contract |
+      not c.isNUMS or  -- keypath bypass: real pubkey allows keypath spend
+      some m : CCVModeBypassed | m.src = t.extraInput)  -- mode confusion
 }
 
 -- Assertion: cross-vault injection should not be possible if both
--- vaults are correctly configured
+-- vaults are correctly configured (NUMS internal key, no mode confusion)
 assert noCrossVaultInjection {
-  -- If the extra input has proper CCV enforcement, the cross-vault
-  -- tx cannot satisfy both covenant conditions simultaneously
-  -- (CTV constrains outputs; CCV constrains outputs differently)
+  -- With proper CCV configuration, the extra input cannot be spent
+  -- without satisfying CCV guards, which a CTV tx doesn't do
   all t : CrossVaultTx |
-    -- At least one covenant check must fail
-    not (t.ctvInput.status = VAULTED and t.extraInput.status = VAULTED)
+    let ccvUtxo = t.extraInput |
+      ccvUtxo.contract.isNUMS and
+      no m : CCVModeBypassed | m.src = ccvUtxo
 }
 
 -- ============================================================
 -- PROPERTY 10: Revault-to-Dust Termination
 -- ============================================================
--- The splitting attack creates progressively smaller UTXOs.
+-- The splitting attack creates progressively smaller UTXOs via revault.
 -- Does it terminate at the dust threshold?
 
--- Dust threshold: 546 sats for P2TR outputs (Bitcoin Core standard)
-fun dustThreshold : Int { 2 }  -- abstracted; use scope-appropriate value
+fun dustThreshold : Int { 2 }  -- abstract proxy for 546 sats
 
--- A UTXO is dust if its value <= dust threshold
 pred isDust[u: UTXO] {
   u.value <= dustThreshold
 }
 
--- The splitting attack: each revault divides value
--- After N splits, the smallest UTXO has value = deposit / 2^N
--- (if splitting by half each time)
-
--- Predicate: does the splitting sequence terminate?
--- I.e., does every chain of revaults eventually produce a dust UTXO?
+-- Does every chain of revaults eventually produce a dust UTXO?
 pred splittingTerminates {
-  -- For any chain of revault transitions, eventually some output
-  -- falls below dust threshold
-  all f : VaultFamily |
+  all f : (CCVVaultFamily + OPVaultFamily) |
     (#{r : RevaultTransition | r.family = f} > 2) implies
       some u : f.allUTXOs | isDust[u]
 }
 
 -- Can an attacker craft splits that stay above dust indefinitely?
--- With geometric splitting (withdraw fraction < 50%), the vault
--- UTXO decreases but the unvaulting UTXOs can be kept above dust
--- by choosing the right split amount.
 pred indefiniteSplitting {
-  -- There exists a sequence of revaults where every output is above dust
-  some f : VaultFamily |
+  some f : (CCVVaultFamily + OPVaultFamily) |
     #{r : RevaultTransition | r.family = f} > 3 and
     all u : f.allUTXOs | not isDust[u]
 }
 
 -- ============================================================
--- PROPERTY 12: Attacker-optimal split strategy
+-- PROPERTY 11: Fee wallet contention (OP_VAULT specific)
 -- ============================================================
--- The attacker wants to maximize the number of splits while
--- keeping each unvaulting UTXO above the dust threshold.
--- Optimal strategy: withdraw dust+1 each time, keeping remainder
--- as the new vault.
+-- Two OP_VAULT families sharing a single fee wallet. Recovery of one
+-- family can block recovery of the other if both need the same fee UTXO.
 
--- At each split, the attacker withdraws `minWithdraw` sats
-fun minViableWithdraw : Int { 3 }  -- dust + 1 (abstracted)
+pred feeWalletContention {
+  #{OPVaultFamily} >= 2
+  #{FeeWallet.utxos} = 1  -- scarce fee resource
+  some disj f1, f2 : OPVaultFamily |
+    -- Both families need to recover simultaneously
+    some r1 : OPVaultRecover | r1.family = f1 and
+    some r2 : OPVaultRecover | r2.family = f2 and
+    -- Both compete for the same fee UTXO
+    r1.feeInput = r2.feeInput
+}
 
--- Maximum splits from a given deposit value
--- deposit / minViableWithdraw (geometric ceiling)
-pred maxSplits[f: VaultFamily, n: Int] {
-  -- n is the number of revault transitions in this family
-  #{r : RevaultTransition | r.family = f} = n
-  -- All unvaulting outputs are >= dust threshold
-  all u : f.allUTXOs | u.status = UNVAULTING implies
-    u.value >= minViableWithdraw
+-- Assertion: fee contention does not prevent recovery within CSV window
+assert noRecoveryBlockedByContention {
+  all disj f1, f2 : OPVaultFamily |
+    #{FeeWallet.utxos} = 1 implies
+      -- At least one family can always recover
+      (some r : OPVaultRecover | r.family = f1) or
+      (some r : OPVaultRecover | r.family = f2)
+}
+
+-- ============================================================
+-- Mixed vault chain: CTV + CCV on same blockchain
+-- ============================================================
+pred mixedVaultChain {
+  some f1 : CTVVaultFamily |
+    some u1 : f1.allUTXOs | u1.status = VAULTED
+  some f2 : CCVVaultFamily |
+    some u2 : f2.allUTXOs | u2.status = VAULTED
 }
 
 -- ============================================================
 -- CHECKS
 -- ============================================================
 
--- Cross-vault injection (should find instance if CTV + CCV coexist)
-check noCrossVaultInjection for 8 but 5 Int, 10 Time
+-- Cross-vault injection (should HOLD if CCV properly configured)
+check noCrossVaultInjection for 10 but 5 Int, 12 Time
 
--- Splitting termination
+-- Fee contention (should find counterexample — both families block each other)
+check noRecoveryBlockedByContention for 10 but 5 Int, 12 Time
+
+-- Splitting
 run splittingTerminates for 10 but 5 Int, 12 Time
 run indefiniteSplitting for 10 but 5 Int, 12 Time
 
--- ============================================================
--- Instance generation for cross-covenant scenarios
--- ============================================================
-
--- Scenario: CTV and CCV vaults on the same chain
-pred mixedVaultChain {
-  -- At least one CTV vault family and one CCV vault family
-  -- (would need to import ctv_vault and ccv_vault; here we
-  -- model it abstractly with different VaultFamily subtypes)
-  some disj f1, f2 : VaultFamily |
-    f1 != f2 and
-    some u1 : f1.allUTXOs | u1.status = VAULTED and
-    some u2 : f2.allUTXOs | u2.status = VAULTED
-}
-run mixedVaultChain for 8 but 5 Int, 10 Time
-
--- Fee wallet shared across two OP_VAULT families
-pred sharedFeeWallet {
-  some disj f1, f2 : VaultFamily |
-    f1 != f2
-  -- Both families need fee wallet UTXOs for operations
-  -- But there's only one fee wallet with limited UTXOs
-}
-run sharedFeeWallet for 8 but 5 Int, 10 Time
+-- Scenarios
+run mixedVaultChain for 10 but 5 Int, 12 Time
+run feeWalletContention for 10 but 5 Int, 12 Time
+run crossInputInjection for 10 but 5 Int, 12 Time

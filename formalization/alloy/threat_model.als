@@ -73,6 +73,32 @@ pred opvDualKey {
   Attacker.controls = TriggerKey + RecoveryAuthKey
 }
 
+-- CAT+CSFS attack profiles (same keys as CTV: HotKey + ColdKey)
+pred catcsfsHotKeyOnly {
+  Attacker.controls = HotKey
+}
+
+pred catcsfsColdKeyOnly {
+  Attacker.controls = ColdKey
+}
+
+pred catcsfsBothKeys {
+  Attacker.controls = HotKey + ColdKey
+}
+
+-- Simplicity attack profiles (same keys as CAT+CSFS: HotKey + ColdKey)
+pred simplicityHotKeyOnly {
+  Attacker.controls = HotKey
+}
+
+pred simplicityColdKeyOnly {
+  Attacker.controls = ColdKey
+}
+
+pred simplicityBothKeys {
+  Attacker.controls = HotKey + ColdKey
+}
+
 -- ============================================================
 -- Property 2: No Unauthorized Extraction
 -- ============================================================
