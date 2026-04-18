@@ -338,6 +338,7 @@ class SimplicityAdapter(VaultAdapter):
         return {
             "revault": False,
             "batched_trigger": False,
+            "batched_recovery": False,
             "keyless_recovery": False,
             "output_constrained_recovery": True,
             "csv_timelock": True,
@@ -350,6 +351,21 @@ class SimplicityAdapter(VaultAdapter):
         return False
 
     def supports_batched_trigger(self) -> bool:
+        return False
+
+    def supports_batched_recovery(self) -> bool:
+        # The vault and unvault Simplicity programs bind recovery via
+        # jet::outputs_hash() == param::VAULT_RECOVER_OUTPUTS_HASH (see
+        # simf/vault.simf, simf/unvault.simf). That hash is an exact
+        # Merkle commitment over the complete output tuple (recovery
+        # output with a fixed amount, plus the explicit fee output), so
+        # a single transaction cannot simultaneously satisfy N distinct
+        # input vaults: aggregating N inputs into one recovery output
+        # changes the amount and thus the outputs_hash away from each
+        # individual input's committed value. Unlike BIP-345's
+        # per-output recoveryauth check or BIP-443's default
+        # aggregation, Simplicity's whole-tuple commitment has no
+        # looser mode that would permit per-input binding.
         return False
 
     def supports_keyless_recovery(self) -> bool:

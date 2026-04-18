@@ -230,6 +230,74 @@ class CCVAdapter(VaultAdapter):
             amount_sats=amount,
         )
 
+    def recover_batched(self, states: List) -> TxRecord:
+        """Batched recovery: N Vault/Unvaulting UTXOs spent into one output.
+
+        BIP-443 default aggregation mode permits multiple inputs to target
+        the same output index. All inputs use the keyless "recover" clause;
+        the shared recovery output (``out_i=0``) aggregates their amounts.
+        The recovery destination is the pre-committed recover_pk address.
+
+        .. note::
+            All inputs are routed to output index 0. Real-world watchtowers
+            may want to distribute recovered funds across multiple cold
+            outputs (e.g. to serve distinct users of a multi-tenant
+            watchtower). Extending this method to accept a list of
+            ``out_i`` per input is supported by BIP-443 aggregation but
+            not exercised by the current experiments. The single-output
+            simplification is safe for the measurements in
+            ``exp_watchtower_exhaustion.py`` Phase 6a.
+
+        Args:
+            states: list of ``VaultState`` or ``UnvaultState`` (at least 1)
+
+        Returns:
+            ``TxRecord`` for the batched recovery transaction. Inspect via
+            ``adapter.collect_tx_metrics(record, rpc)`` to read the measured
+            vsize and weight.
+        """
+        assert len(states) >= 1, "Need at least one state to recover"
+
+        # Extract underlying pymatt contract instances (works for both
+        # VaultState and UnvaultState: both carry extra["instance"]).
+        instances = [s.extra["instance"] for s in states]
+        total_amount = sum(s.amount_sats for s in states)
+
+        # Build one (instance, "recover", {out_i: 0}) spend per input.
+        # All inputs target the same out_i=0, causing BIP-443's default
+        # aggregation to sum the input amounts into the single recovery
+        # output. No signatures required (CCV recovery is keyless).
+        spends = [
+            (inst, "recover", {"out_i": 0})
+            for inst in instances
+        ]
+
+        spend_tx, _sighashes = self._manager.get_spend_tx(spends)
+
+        # Recovery clause does not require signatures; witness is just the
+        # out_i stack push. get_spend_wit builds that.
+        spend_tx.wit.vtxinwit = []
+        for inst, action, args in spends:
+            spend_tx.wit.vtxinwit.append(
+                self._manager.get_spend_wit(inst, action, args)
+            )
+
+        # Broadcast and confirm via the manager. This mines one block so
+        # the recovery tx is finalized on-chain.
+        self._manager.spend_and_wait(instances, spend_tx)
+
+        # The resulting txid comes from any of the consumed instances
+        # (they all share spending_tx after confirmation).
+        spent = instances[0].spending_tx
+        txid = _hash_to_hex(spent.hash) if spent else ""
+
+        return TxRecord(
+            txid=txid,
+            label="recover_batched",
+            raw_hex=spend_tx.serialize().hex() if hasattr(spend_tx, "serialize") else "",
+            amount_sats=total_amount,
+        )
+
     # ── Internals & Capabilities ────────────────────────────────────
 
     def get_internals(self) -> dict:
@@ -247,6 +315,10 @@ class CCVAdapter(VaultAdapter):
         return True
 
     def supports_batched_trigger(self) -> bool:
+        return True
+
+    def supports_batched_recovery(self) -> bool:
+        """BIP-443 default aggregation allows N inputs → 1 shared output."""
         return True
 
     def supports_keyless_recovery(self) -> bool:

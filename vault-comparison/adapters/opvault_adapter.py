@@ -583,12 +583,103 @@ class OPVaultAdapter(VaultAdapter):
             "workdir": self._workdir,
         }
 
+    def recover_batched(self, states: List) -> TxRecord:
+        """Batched authorized recovery: N Vault/Unvaulting UTXOs in one tx.
+
+        BIP-345 §"Batching" lines 613–621 permits batched authorized recovery
+        across UTXOs. Since all vaults in this adapter share the same
+        VaultConfig (setup() uses a single xpub for all vault_num indices),
+        they share a single recoveryauth key and a single recovery-sPK.
+        The upstream ``ov.get_recovery_tx()`` accepts a list of UTXOs and
+        constructs a transaction with N inputs, one shared ``recoveryOut``,
+        and one ephemeral anchor.
+
+        Args:
+            states: list of ``VaultState`` and/or ``UnvaultState`` (at least 1)
+
+        Returns:
+            ``TxRecord`` for the batched recovery transaction.
+        """
+        assert len(states) >= 1, "Need at least one state to recover"
+
+        config = self._shared_config
+        monitor = self._shared_monitor
+        chain_state = monitor.rescan()
+
+        # Collect UTXOs from chain_state for each state. We support mixed
+        # VaultState/UnvaultState in one batch; each source determines
+        # whether to look in vault_utxos or trigger_utxos.
+        collected = []
+        total_amount = 0
+        for st in states:
+            if isinstance(st, VaultState):
+                target = st.vault_txid
+                pool = list(chain_state.vault_utxos.values())
+            elif isinstance(st, UnvaultState):
+                target = st.unvault_txid
+                pool = list(chain_state.trigger_utxos.values())
+                pool.extend(chain_state.theft_trigger_utxos.keys())
+            else:
+                raise ValueError(f"Cannot recover from {type(st).__name__}")
+
+            matches = [u for u in pool
+                       if target in str(getattr(u, "outpoint", ""))]
+            if not matches:
+                # Fall back to first unmatched UTXO of the right kind.
+                # With a shared monitor, UTXOs may not carry the txid in
+                # their outpoint string; pick by amount as a heuristic.
+                matches = [u for u in pool
+                           if getattr(u, "value_sats", 0) == st.amount_sats]
+            assert matches, (
+                f"No matching UTXO found for {target[:16]}… among {len(pool)}"
+            )
+            collected.append(matches[0])
+            total_amount += st.amount_sats
+
+        assert len(collected) == len(states), (
+            f"Matched {len(collected)} UTXOs for {len(states)} states"
+        )
+
+        # Load recoveryauth key (shared across all vaults in this config)
+        secd = json.loads(config.secrets_filepath.read_text())[config.id]
+        recovery_privkey = self.ov.recoveryauth_phrase_to_key(
+            secd['recoveryauth_phrase']).get_bytes()
+
+        from verystable import core
+
+        def recoveryauth_signer(msg: bytes) -> bytes:
+            return core.key.sign_schnorr(recovery_privkey, msg)
+
+        self._ensure_fee_utxos()
+
+        # Upstream builds the batched recovery transaction. The function
+        # accepts any number of UTXOs; each input contributes an
+        # authorized-recovery witness path. The output is a single
+        # recoveryOut aggregating all input amounts, plus an ephemeral
+        # anchor for fee bumping (BIP-345 lines 389–391).
+        recovery_spec = self.ov.get_recovery_tx(
+            config, self._fee_wallet, collected, recoveryauth_signer
+        )
+
+        self._ov_rpc.sendrawtransaction(recovery_spec.tx.tohex())
+        self._ov_rpc.generatetoaddress(1, self._fee_wallet.fee_addr)
+
+        return TxRecord(
+            txid=recovery_spec.tx.rehash(),
+            label="recover_batched",
+            amount_sats=total_amount,
+        )
+
     def supports_revault(self) -> bool:
         """OP_VAULT supports partial withdrawal with revault.
 
         The start_withdrawal() function automatically creates a revault
         output when the vault UTXOs exceed the destination amount.
         """
+        return True
+
+    def supports_batched_recovery(self) -> bool:
+        """BIP-345 §"Batching" lines 613–621 authorized-recovery batching."""
         return True
 
     def supports_batched_trigger(self) -> bool:

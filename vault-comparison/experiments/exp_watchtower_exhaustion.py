@@ -585,8 +585,23 @@ def _run_splitting_attack(adapter, result, rpc, max_splits):
             f"per block of recoveries."
         )
 
-    # ── Phase 6: Batched recovery analysis ──────────────────────────
+    # ── Phase 6: Batched recovery — measured where possible ─────────
     result.observe("\n=== Phase 6: Batched recovery analysis ===")
+
+    # Branch 6a (when supports_batched_recovery): construct and broadcast a
+    # real batched recovery transaction, record measured vsize as a function
+    # of N. This replaces the prior estimate-based analysis with on-chain
+    # data and validates the (overhead, per_input) decomposition against
+    # measurements.
+    if adapter.supports_batched_recovery():
+        measured_batch = _measure_batched_recovery(adapter, result, rpc)
+    else:
+        measured_batch = None
+        result.observe(
+            f"  {adapter.name} does not support batched recovery by spec; "
+            f"skipping measurement branch and using analytic estimate only."
+        )
+
     result.observe(
         "Current analysis assumes the watchtower recovers each Unvaulting UTXO "
         "individually.  In practice, a watchtower could batch recoveries into "
@@ -605,18 +620,31 @@ def _run_splitting_attack(adapter, result, rpc, max_splits):
     # So input_cost ≈ recover_vsize - overhead - output_cost
     # We'll estimate overhead+output conservatively at ~55 vB
 
-    FIXED_OVERHEAD_ESTIMATE = 55  # version + locktime + segwit marker + 1 output
-    # Uncertainty: overhead could range from ~45 vB (minimal: 4+4+0.5+31+varint) to
-    # ~65 vB (with witness discount variation and output script differences).
-    # This gives per-input cost uncertainty of ±10 vB.
-    OVERHEAD_UNCERTAINTY = 10  # ±10 vB on the fixed overhead estimate
-    input_cost_estimate = max(recover_vsize - FIXED_OVERHEAD_ESTIMATE, recover_vsize // 2)
-    input_cost_low = max(recover_vsize - (FIXED_OVERHEAD_ESTIMATE + OVERHEAD_UNCERTAINTY), recover_vsize // 2)
-    input_cost_high = max(recover_vsize - (FIXED_OVERHEAD_ESTIMATE - OVERHEAD_UNCERTAINTY), recover_vsize // 2)
+    # If Phase 6a produced measured constants, use them; otherwise fall back
+    # to the prior structural estimate.  Measured values are preferred
+    # because they reflect the actual witness program size on regtest.
+    if measured_batch and measured_batch["overhead"] is not None:
+        FIXED_OVERHEAD_ESTIMATE = measured_batch["overhead"]
+        input_cost_estimate = measured_batch["per_input"]
+        OVERHEAD_UNCERTAINTY = 2  # measured constants have tight bounds
+        input_cost_low = input_cost_estimate - OVERHEAD_UNCERTAINTY
+        input_cost_high = input_cost_estimate + OVERHEAD_UNCERTAINTY
+        constants_source = "measured on regtest via Phase 6a"
+    else:
+        FIXED_OVERHEAD_ESTIMATE = 55  # version + locktime + segwit marker + 1 output
+        # Uncertainty: overhead could range from ~45 vB (minimal: 4+4+0.5+31+varint) to
+        # ~65 vB (with witness discount variation and output script differences).
+        OVERHEAD_UNCERTAINTY = 10  # ±10 vB on the fixed overhead estimate
+        input_cost_estimate = max(recover_vsize - FIXED_OVERHEAD_ESTIMATE, recover_vsize // 2)
+        input_cost_low = max(recover_vsize - (FIXED_OVERHEAD_ESTIMATE + OVERHEAD_UNCERTAINTY), recover_vsize // 2)
+        input_cost_high = max(recover_vsize - (FIXED_OVERHEAD_ESTIMATE - OVERHEAD_UNCERTAINTY), recover_vsize // 2)
+        constants_source = "estimated (structural decomposition)"
+
     result.observe(
         f"Individual recovery: {recover_vsize} vB "
-        f"(estimated {FIXED_OVERHEAD_ESTIMATE} vB overhead ±{OVERHEAD_UNCERTAINTY} vB + "
-        f"{input_cost_estimate} vB per input [{input_cost_low}–{input_cost_high} vB range])"
+        f"({constants_source}: {FIXED_OVERHEAD_ESTIMATE} vB overhead "
+        f"±{OVERHEAD_UNCERTAINTY} vB + {input_cost_estimate} vB per input "
+        f"[{input_cost_low}–{input_cost_high} vB range])"
     )
     result.observe(
         f"NOTE: The overhead decomposition ({FIXED_OVERHEAD_ESTIMATE} vB fixed + "
@@ -780,3 +808,109 @@ def _tx_record(label, txid, amount):
     """Helper to build a TxRecord from experiment data."""
     from adapters.base import TxRecord
     return TxRecord(txid=txid, label=label, amount_sats=amount)
+
+
+# Batch sizes to sweep for measured batched-recovery vsize.  Kept modest
+# to avoid blowing out regtest test time; linear regression on these five
+# points is sufficient to separate the fixed overhead from the per-input
+# cost.
+BATCHED_RECOVERY_NS = [2, 5, 10, 25, 50]
+
+# Per-vault amount used for the batched-recovery measurement sweep.  Kept
+# small enough that even N=50 fits the regtest wallet comfortably.
+BATCH_VAULT_AMOUNT = 1_000_000  # 0.01 BTC per vault
+
+
+def _measure_batched_recovery(adapter, result, rpc):
+    """Measure real batched-recovery vsize as a function of N.
+
+    Returns a dict ``{"overhead": int, "per_input": int,
+    "points": {N: vsize}}`` derived by linear regression on the measured
+    data points.  The fit equation is ``vsize(N) = overhead + per_input × N``.
+
+    Caller is expected to integrate the returned decomposition into the
+    analytic model (replacing the prior estimates in
+    ``WT_BATCHED_RECOVERY_OVERHEAD`` / ``WT_BATCHED_RECOVERY_PER_INPUT``).
+    """
+    result.observe("\n--- Phase 6a: Measured batched recovery ---")
+    result.observe(
+        f"Sweeping batch sizes N ∈ {BATCHED_RECOVERY_NS} on {adapter.name}.  "
+        f"Each measurement creates N vaults of {BATCH_VAULT_AMOUNT:,} sats, "
+        f"triggers them, then constructs a single batched recovery tx."
+    )
+
+    measured = {}
+
+    for n in BATCHED_RECOVERY_NS:
+        try:
+            # Create N independent vaults, trigger each, then batch-recover.
+            vaults = [adapter.create_vault(BATCH_VAULT_AMOUNT) for _ in range(n)]
+
+            # Trigger each vault individually to produce N Unvaulting UTXOs.
+            # (We could batch-trigger here but that's already measured in
+            # exp_multi_input; this experiment isolates recovery-side scaling.)
+            unvault_states = []
+            for v in vaults:
+                uv = adapter.trigger_unvault(v)
+                unvault_states.append(uv)
+
+            # Single batched recovery transaction across all N Unvaulting UTXOs
+            record = adapter.recover_batched(unvault_states)
+            info = rpc.get_tx_info(record.txid)
+            vsize = info.get("vsize", 0)
+            weight = info.get("weight", 0)
+            fee = rpc.get_tx_fee_sats(record.txid)
+            measured[n] = vsize
+
+            per_input_empirical = vsize / n
+            result.add_tx(TxMetrics(
+                label=f"recover_batched_n{n}",
+                txid=record.txid,
+                vsize=vsize,
+                weight=weight,
+                fee_sats=fee,
+                num_inputs=n,
+                num_outputs=len(info.get("vout", [])),
+            ))
+            result.observe(
+                f"  N={n:>3}: vsize={vsize:>4} vB, weight={weight:>5}, "
+                f"per-input={per_input_empirical:>5.1f} vB, fee={fee:,} sats"
+            )
+        except Exception as e:
+            err = str(e)
+            result.observe(f"  N={n}: FAILED — {err[:150]}")
+
+    if len(measured) < 2:
+        result.observe(
+            "  INSUFFICIENT DATA: need at least 2 successful measurements "
+            "to extract (overhead, per_input) decomposition."
+        )
+        return {"overhead": None, "per_input": None, "points": measured}
+
+    # Linear regression: vsize(N) = a + b×N.
+    # Using ordinary least squares since the measurement noise is low and
+    # the model is structurally linear.
+    ns = sorted(measured.keys())
+    mean_n = sum(ns) / len(ns)
+    mean_v = sum(measured[n] for n in ns) / len(ns)
+    num = sum((n - mean_n) * (measured[n] - mean_v) for n in ns)
+    den = sum((n - mean_n) ** 2 for n in ns)
+    per_input = num / den if den else 0
+    overhead = mean_v - per_input * mean_n
+
+    result.observe(
+        f"  Linear fit: vsize(N) = {overhead:.1f} + {per_input:.2f} × N"
+    )
+    result.observe(
+        f"  Fixed overhead: ~{overhead:.0f} vB  |  per-input: ~{per_input:.0f} vB"
+    )
+    result.observe(
+        "  Use these measured constants when computing r^\\dagger under "
+        "batched-defender strategy in paper §3.3.4."
+    )
+
+    return {
+        "overhead": round(overhead),
+        "per_input": round(per_input),
+        "points": measured,
+    }

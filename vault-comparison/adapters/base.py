@@ -168,6 +168,7 @@ class VaultAdapter(ABC):
         return {
             "revault": self.supports_revault(),
             "batched_trigger": self.supports_batched_trigger(),
+            "batched_recovery": self.supports_batched_recovery(),
             "keyless_recovery": self.supports_keyless_recovery(),
             "max_batch_size": None,
             "recovery_requires_key": not self.supports_keyless_recovery(),
@@ -181,6 +182,16 @@ class VaultAdapter(ABC):
 
     def supports_batched_trigger(self) -> bool:
         """Can multiple vault UTXOs be triggered in a single tx?"""
+        return False
+
+    def supports_batched_recovery(self) -> bool:
+        """Can multiple Unvaulting/vault UTXOs be recovered in a single tx?
+
+        BIP-345 OP_VAULT supports this when the vaults share the same
+        recovery-sPK (unauthorized) or recoveryauth key (authorized).
+        BIP-443 CCV supports this via the default aggregation mode.
+        CTV and CAT+CSFS do not support it by construction.
+        """
         return False
 
     def supports_keyless_recovery(self) -> bool:
@@ -200,6 +211,17 @@ class VaultAdapter(ABC):
     def trigger_batched(self, vaults: List[VaultState]) -> UnvaultState:
         """Trigger multiple vaults in a single transaction."""
         raise NotImplementedError(f"{self.name} does not support batched triggers")
+
+    def recover_batched(self, states: List) -> TxRecord:
+        """Recover multiple Unvaulting or vault UTXOs in a single transaction.
+
+        ``states`` is a list of ``VaultState`` or ``UnvaultState`` instances.
+        All states must share a compatible recovery path per the covenant's
+        batching constraints (BIP-345 §"Batching", BIP-443 default aggregation).
+
+        Returns a single ``TxRecord`` for the batched recovery transaction.
+        """
+        raise NotImplementedError(f"{self.name} does not support batched recovery")
 
     # ── Metrics collection ───────────────────────────────────────────
 
