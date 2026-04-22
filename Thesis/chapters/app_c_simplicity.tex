@@ -9,42 +9,46 @@ typed combinator calculus with Coq-verified denotational semantics ---
 deployed on Elements~\cite{DPNS16}, a Bitcoin-adjacent sidechain whose
 blocks are produced by known functionaries rather than by proof-of-work
 miners. Execution uses native-code \emph{jets} for known combinator
-subtrees. Because Elements' consensus model differs from Bitcoin's,
-we exclude Simplicity from the formal results of
-Chapter~\ref{ch:security} and report it here as a cross-substrate
-reference: Simplicity demonstrates that the dominant corner $D^\star$
-of Chapter~\ref{ch:security} is occupiable on some substrate, even
-while no Bitcoin covenant proposal currently occupies it.
+subtrees. Our Simplicity vault is excluded from the formal results of
+Chapter~\ref{ch:security} and reported here as a cross-substrate
+reference.
 
-This distinction is load-bearing for the thesis's claim.
-Chapter~\ref{ch:security}'s contribution is \emph{unoccupied on
-Bitcoin}, not \emph{theoretically unoccupiable}. Simplicity
-is the constructive existence proof for the latter. A reader who
-conflates the two would mistake a specification gap for an
-impossibility theorem.
+Chapter~\ref{ch:security}'s contribution is that the dominant corner
+$D^\star$ is \emph{unoccupied on Bitcoin} among current proposals.
+Simplicity provides a constructive existence proof that the corner is
+occupiable on some substrate.
 
 \section{Design-Space Position}
 \label{app:simplicity:axes}
 
-Our Simplicity vault occupies the strict-best axis values on every
-axis where such a value exists, in the vocabulary of
+Our Simplicity vault on Elements supports per-output binding on both
+trigger and recovery paths, atomic or bounded partial withdrawal,
+cold-key recovery with an optional keyless post-timeout sweep, and
+MAX\_FEE-capped in-value fee deduction. In the atomic configuration
+with cold-key-only recovery, it occupies a strict-best position on
+every axis where such a position exists in the taxonomy of
 Section~\ref{se:design_space_axes}:
 
 \begin{itemize}
   \item \axauth{} = \texttt{cold-key}: key-gated recovery via a
-    Schnorr signature check.
-  \item \axrevault{} = \texttt{no}: atomic withdrawal; the program
-    enforces the complete output tuple via \texttt{jet::outputs\_hash()
-    = param::VAULT\_RECOVER\_OUTPUTS\_HASH} (see
-    \texttt{simf/vault.simf}).
-  \item \axfee{} = \texttt{dynamic} (Elements fee structure): fees
-    live inside the transaction; no out-of-band anchor.
+    Schnorr signature check. An optional construction exposes a
+    keyless sweep to a pre-committed heir address once
+    \texttt{jet::check\_lock\_height()} passes.
+  \item \axrevault{} = \texttt{no} (atomic) or \texttt{yes-bounded}
+    (bounded-partial with a compile-time \texttt{RESIDUAL\_FLOOR}
+    covenant that structurally caps the resulting UTXO count).
+  \item \axfee{} = \texttt{dynamic}: in-value fee deduction capped at a
+    compile-time \texttt{MAX\_FEE} ceiling. The signer chooses the
+    actual fee at broadcast. Elements carries an explicit fee output;
+    there is no CPFP anchor surface.
   \item \axwdbind{} = \texttt{dedicated-jets-combinator}: the
-    withdrawal destination is bound through a typed output-hash
-    commitment at compile time, stronger than any of the
-    Bitcoin proposals on the same axis.
-  \item \axrecbind{} = \texttt{dedicated-jets-combinator}: same
-    binding for the recovery leaf, eliminating class \classcold{}.
+    withdrawal destination is bound through
+    \texttt{jet::output\_script\_hash(0)} and
+    \texttt{jet::output\_amount(0)} at compile time, stronger than
+    any of the Bitcoin proposals on the same axis.
+  \item \axrecbind{} = \texttt{dedicated-jets-combinator}: the same
+    jets bind the recovery output, eliminating class \classcold{}
+    for the atomic cold-key-only configuration.
   \item \axopsurf{} = \texttt{single-mode}: a program's meaning is
     determined by its Merkle root; no \texttt{OP\_SUCCESSx}-style
     fallthrough surface.
@@ -52,37 +56,75 @@ Section~\ref{se:design_space_axes}:
     fundamental operators are total, typed, and Coq-verified.
 \end{itemize}
 
-Consequently, Simplicity's vault program is immune by construction
-to classes \classfee{}, \classgrief{}, \classscale{}, \classhot{},
-\classcold{}, and \classmode{} --- every attack class identified in
-Chapter~\ref{ch:security}. It occupies the strict-best position on
-\axauth{}, \axrevault{}, \axwdbind{}, \axrecbind{}, and \axintro{}
-simultaneously; no Bitcoin proposal does.
+In the atomic configuration, our Simplicity vault is immune by
+construction to classes \classfee{}, \classgrief{}, \classscale{},
+\classhot{}, \classcold{}, and \classmode{} --- every attack class
+identified in Chapter~\ref{ch:security}. It occupies the strict-best
+position on \axauth{}, \axrevault{}, \axwdbind{}, \axrecbind{}, and
+\axintro{} simultaneously; no Bitcoin proposal does. The
+bounded-partial and keyless-post-timeout constructions admit
+additional exposures documented in Section~\ref{app:simplicity:threats}
+below.
 
-\section{Lifecycle Measurements}
+\section{Lifecycle and Capabilities}
 \label{app:simplicity:empirical}
 
-The Simplicity vault lifecycle totals $865\vB{}$ (deposit $269$,
-trigger $298$, withdraw $298$, recover $286$), $49$--$135\%$ larger
-than the Bitcoin designs of Chapter~\ref{ch:results}. The overhead
-bundles Elements' serialisation (${\sim}30$--$40$ bytes per output
-for confidential-transaction fields even in non-confidential mode)
-and Simplicity's bit-oriented DAG witness format. Elements
-functionaries do not operate a public mempool, so class \classfee{}
-(fee-channel pinning) has no substrate analogue under
-honest-federation assumptions.
+The lifecycle measurement of $865\vB{}$ (deposit $269$, trigger $298$,
+withdraw $298$, recover $286$), $49$--$135\%$ larger than the Bitcoin
+designs of Table~\ref{tab:lifecycle}, is for the atomic configuration
+with cold-key-only recovery. The overhead bundles Elements'
+serialisation ($30$--$40$ bytes per output for confidential-transaction
+fields even in non-confidential mode) and Simplicity's bit-oriented
+DAG witness format. Elements functionaries do not operate a public
+mempool, so class \classfee{} (fee-channel pinning) has no substrate
+analogue under honest-federation assumptions.
 
-Our Simplicity vault is atomic: recovery binds the complete output
-tuple via the jets commitment cited above, admitting neither partial
-withdrawal nor batched recovery and placing the program at
-\axrevault{} = \texttt{no} in the design-space lattice. Class
-\classscale{} (per-UTXO recovery-cost scaling) has no surface.
-Cold-key compromise (TM11) forces recovery but cannot redirect
-funds, matching CTV and OP\_VAULT. A different Simplicity program
-could express \axrevault{} = \texttt{yes} by replacing the
-whole-tuple commitment with per-output checks; that design would
-inherit class \classscale{} under the D2 implication
-(Section~\ref{se:design_space_axes}) but is not what we measured.
+The bounded-partial and keyless-post-timeout constructions share the
+same covenant infrastructure and jets, differing only in the Simplicity
+program selected at spend time. Integration tests cover lifecycle and
+recovery for all three configurations; full lifecycle vsize
+measurements for bounded-partial and keyless-post-timeout remain open.
+
+The MAX\_FEE design deserves a note: the in-value deduction is capped
+at a compile-time ceiling and the signer picks the actual fee at
+broadcast. The cap keeps a compromised signer from burning the full
+vault amount as fee.
+
+\section{Threat Coverage}
+\label{app:simplicity:threats}
+
+The mapping below records, for a Simplicity vault on Elements, which
+threat models are structurally addressed, which are not applicable
+and for what reason, and which are addressed with a trade-off.
+
+\begin{table}[h]
+\centering
+\footnotesize
+\begin{tabular}{@{}lll@{}}
+\toprule
+Threat & Simplicity & Notes \\
+\midrule
+TM1 fee pinning            & N/A (substrate)     & Elements fee outputs; no CPFP anchor                                         \\
+TM2 recovery griefing      & covered             & cold-key recovery; keyless post-timeout sweep, if configured, widens surface \\
+TM3 timelock race          & covered             & CSV via \texttt{jet::check\_lock\_distance()}                                \\
+TM4 / \classscale{}        & atomic: covered;     & residual-floor covenant structurally caps UTXO count                        \\
+                           & bounded-partial: bounded &                                                                         \\
+TM5 trigger-xpub theft     & covered             & two-key model                                                                \\
+TM6 dual-key compromise    & N/A (scope)         & Kerckhoffs out of scope                                                      \\
+TM7 address reuse          & covered             & fresh plan per vault                                                         \\
+TM8 CCV mode bypass        & N/A (design)        & single-mode on A6                                                            \\
+TM9 hot-key redirection    & covered             & per-output binding prevents redirection                                      \\
+TM10 witness tampering     & covered             & typed-combinator witness check                                               \\
+TM11 cold-key compromise   & covered (forced recovery) & keyless post-timeout sweep, if configured, introduces a heir-timing trade-off \\
+\bottomrule
+\end{tabular}
+\caption{Threat coverage for our Simplicity vault on Elements. Cells
+labelled \emph{bounded} (TM4 under bounded-partial) and
+\emph{trade-off} (TM2 and TM11 under the keyless post-timeout
+construction) mark design-space points that are not captured by the
+binary covered/uncovered split used in Chapter~\ref{ch:security}.}
+\label{tab:simplicity-threats}
+\end{table}
 
 \section{Foundations and Substrate}
 \label{app:simplicity:foundations}
@@ -91,9 +133,9 @@ Simplicity's Coq-verified denotational semantics give stronger
 guarantees than Alloy bounded model checking of the Bitcoin Script
 extensions can produce --- a Simplicity program's meaning is
 determined by its Merkle root, under a formal semantics that has
-been mechanically verified. However, Simplicity on Liquid is live
-today under \emph{federation trust}, whereas the four Bitcoin Script
-extensions remain under \emph{Bitcoin consensus review}.
+been mechanically verified. Simplicity on Liquid is live today under
+\emph{federation trust}; the four Bitcoin Script extensions remain
+under \emph{Bitcoin consensus review}.
 
 The substrate choice is a security-relevant decision alongside the
 per-covenant analysis of Chapter~\ref{ch:security}: a vault on
@@ -116,5 +158,8 @@ construction (Poelstra's sketch~\cite{Poe21}) that moves CAT+CSFS
 to \axrecbind{} = \texttt{signature-dual-bind}; this would eliminate
 class \classcold{} while retaining the hot-key-theft immunity of
 class \classhot{}, placing CAT+CSFS at the dominant corner of the
-Bitcoin sublattice. Neither path is available as of
-thesis submission; we leave both as open problems.
+Bitcoin sublattice. Neither path is available as of thesis
+submission; we leave both as open problems. The bounded-partial
+construction's residual-floor covenant is a further example of a
+structural bound; the question of how close such a bound can come to
+full class-\classscale{} immunity is left open.

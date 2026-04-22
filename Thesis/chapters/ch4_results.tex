@@ -333,14 +333,26 @@ would produce smaller transactions; the 865\vB{} figure includes both the langua
 overhead and the chain overhead.
 
 \paragraph{Output-constrained recovery.}
-Unlike CAT+CSFS, the Simplicity vault enforces \texttt{jet::outputs\_hash()} on
-\emph{both} trigger and recovery paths. Cold key compromise can only recover funds
-to the pre-committed recovery address---matching CCV and OP\_VAULT's output-constrained
-model and providing stronger recovery safety than CAT+CSFS's unconstrained
-\texttt{OP\_CHECKSIG} (TM11, Section~\ref{se:cold_key_recovery}).
+The Simplicity vault binds output 0 via
+\texttt{jet::output\_script\_hash(0)} and \texttt{jet::output\_amount(0)} on
+\emph{both} trigger and recovery paths. Cold-key compromise can only recover
+funds to the pre-committed recovery address---matching CCV and OP\_VAULT's
+output-constrained model (TM11, Section~\ref{se:cold_key_recovery}).
 
 \paragraph{Fee pinning immunity.}
 Elements uses explicit fee outputs (empty scriptPubKey) rather than Bitcoin's implicit
 fees. There are no anchor outputs to pin with descendant chains, eliminating the
 TM1 attack vector entirely. This immunity is a property of the Elements transaction
 format, not of Simplicity's covenant mechanism.
+
+\paragraph{Capability summary.}
+The 865\vB{} figure above is for the atomic configuration with cold-key-only
+recovery. Our Simplicity vault additionally supports bounded partial withdrawal
+(via a compile-time \texttt{RESIDUAL\_FLOOR} covenant that structurally caps
+the UTXO count) and an optional keyless post-timeout sweep to a pre-committed
+heir address. In-value fee deduction is capped by a compile-time
+\texttt{MAX\_FEE} ceiling, with the signer choosing the actual fee at broadcast.
+Integration tests cover each of these constructions; lifecycle vsizes for the
+non-atomic configurations have not yet been measured. See
+Appendix~\ref{app:simplicity} for the full capability and threat-coverage
+summary.

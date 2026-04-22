@@ -140,15 +140,18 @@ accrue only to the defender.
 \subsection{Simplicity on Elements}
 \label{sec:simplicity-perspective}
 
-Simplicity on Elements occupies the dominant corner of
+Our Simplicity vault on Elements supports per-output binding on
+trigger and recovery, atomic or bounded partial withdrawal, cold-key
+recovery with an optional keyless post-timeout sweep, and MAX\_FEE-capped
+in-value fee deduction. In the atomic configuration with
+cold-key-only recovery, it occupies the dominant corner of
 Section~\ref{sec:imposs:design_space} (strict-best on \axauth{},
 \axrevault{}, \axwdbind{}, \axrecbind{}, and \axintro{}
-simultaneously) but is a cross-substrate reference rather than a
-Bitcoin proposal. Empirical measurements (Simplicity vault
-lifecycle 865\vB{}; per-threat consequences; Coq-verified
-semantics) are reported in Appendix~\ref{app:simplicity}. Its role
-in the argument is to demonstrate that the dominant corner is
-occupiable on some substrate, even while no Bitcoin proposal
-currently occupies it.
+simultaneously). Empirical measurements (lifecycle 865\vB{} for the
+atomic configuration; threat coverage; Coq-verified semantics) and
+the bounded-partial and keyless-post-timeout constructions are
+reported in Appendix~\ref{app:simplicity}. Its role in the argument
+is to demonstrate that the dominant corner is occupiable on some
+substrate, even while no Bitcoin proposal currently occupies it.
 
 \providecommand{\todo}[2][]{\textbf{[TODO: #2]}}

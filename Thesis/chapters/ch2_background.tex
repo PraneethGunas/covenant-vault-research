@@ -85,13 +85,15 @@ The degree of introspection varies across proposals:
 \begin{itemize}
 \item \textbf{Output-hash introspection.} The script computes a hash over all outputs
   of the spending transaction and compares it to an embedded commitment. CTV (BIP-119)
-  and Simplicity's \texttt{jet::outputs\_hash()} use this approach. The script sees
-  only the aggregate hash, not individual output fields.
+  uses this approach. The script sees only the aggregate hash, not individual output
+  fields.
 
 \item \textbf{Per-output introspection.} The script examines individual outputs by
   index---verifying a specific output's scriptPubKey, amount, or both. CCV (BIP-443)
   operates at this granularity, checking that a particular output index matches an
-  expected Taproot structure.
+  expected Taproot structure. Simplicity on Elements~(Appendix~\ref{app:simplicity})
+  also belongs here, binding output 0 via
+  \texttt{jet::output\_script\_hash(0)} and \texttt{jet::output\_amount(0)}.
 
 \item \textbf{Sighash preimage introspection.} The script reconstructs the transaction's
   signature hash from witness-provided fields and verifies it against both a stack-based
@@ -798,18 +800,18 @@ consensus).
 Execution uses \emph{jets}: when the validator encounters a known combinator subtree
 (identified by its canonical Merkle root), it executes a native C implementation instead
 of interpreting the combinators. Jets for transaction introspection
-(\texttt{jet::outputs\_hash()}, \texttt{jet::sig\_all\_hash()}), timelocks
-(\texttt{jet::check\_lock\_distance()}), and cryptographic primitives
-(\texttt{jet::bip\_0340\_verify()}~\cite{BIP340}) provide the building blocks for
-covenant enforcement.
+(\texttt{jet::output\_script\_hash()}, \texttt{jet::output\_amount()},
+\texttt{jet::sig\_all\_hash()}), timelocks (\texttt{jet::check\_lock\_distance()}), and
+cryptographic primitives (\texttt{jet::bip\_0340\_verify()}~\cite{BIP340}) provide the
+building blocks for covenant enforcement.
 
-The Simplicity vault enforces covenants via \texttt{jet::outputs\_hash()}, which
-computes a Merkle hash over all outputs of the spending transaction. The expected hash
-is embedded as a compile-time parameter in the Simplicity program. At spend time, the
-jet computes the hash from the actual transaction outputs; if the values differ, the
-program fails at the consensus level. This is structurally analogous to CTV's template
-hash but operates over Elements' richer output model (explicit asset IDs, confidential
-values, range proofs).
+Our Simplicity vault enforces covenants by binding output 0 via two jets:
+\texttt{jet::output\_script\_hash(0)} (scriptPubKey) and
+\texttt{jet::output\_amount(0)} (asset and amount). Each Simplicity program
+(trigger, withdraw, recover) compares the jet results against values baked in at
+compile time; any divergence fails the program at the consensus level. Per-output
+binding is the basis for bounded partial withdrawal without reshaping the covenant;
+a full capability summary is in Appendix~\ref{app:simplicity}.
 
 The Simplicity vault runs on Elements, a federated sidechain where block production is
 controlled by known functionaries rather than proof-of-work miners. This fundamentally
@@ -874,11 +876,11 @@ transaction fields add approximately 30--40 bytes per output).
   \draw[->, thin, gray] (c1) -- (c3);
 
   % H parameter (lower part of program box)
-  \node[paramnodestyle] (paramnode) at (0, 0.0) {$H$ = expected outputs hash};
+  \node[paramnodestyle] (paramnode) at (0, 0.0) {$H$ = expected scriptPubKey hash (output 0)};
 
   % ===== Spend-time column =====
   \node[tx] (spendtx) at (5.2, 2.6) {Spending TX\\ \footnotesize outputs: [out1, out2]};
-  \node[jetbig] (jeteval) at (5.2, 0.5) {\ttfamily jet::outputs\_hash()};
+  \node[jetbig] (jeteval) at (5.2, 0.5) {\ttfamily jet::output\_script\_hash(0)};
   \node[note, below=0.1cm of jeteval, align=center, text width=4cm]
        {computes hash at spend time};
 
@@ -917,12 +919,13 @@ transaction fields add approximately 30--40 bytes per output).
 
 \end{tikzpicture}}
 \caption{Simplicity vault mechanism on Elements. At compile time, the program
-(a DAG of combinators) embeds an expected outputs-hash~$H$ as a parameter.
-At spend time, \texttt{jet::outputs\_hash()} computes the Merkle hash of the
-spending transaction's outputs. If the computed hash matches~$H$, the program
-accepts; otherwise the program fails at the consensus level. Both trigger and
-recovery leaves enforce this jet---unlike CAT+CSFS, where recovery is
-unconstrained.}
+(a DAG of combinators) embeds an expected scriptPubKey hash~$H$ for output 0 as a parameter.
+At spend time, \texttt{jet::output\_script\_hash(0)} computes the scriptPubKey
+hash of output 0. If the computed hash matches~$H$, the program accepts;
+otherwise the program fails at the consensus level. Both trigger and recovery
+leaves bind output 0 with this jet (and with \texttt{jet::output\_amount(0)}
+for the asset and amount); a full capability summary is in
+Appendix~\ref{app:simplicity}.}
 \label{fig:simplicity_mechanism}
 \end{figure}
 
