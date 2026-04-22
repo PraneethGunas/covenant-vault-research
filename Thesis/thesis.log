@@ -1,4 +1,4 @@
-This is XeTeX, Version 3.141592653-2.6-0.999998 (TeX Live 2026) (preloaded format=xelatex 2026.4.15)  22 APR 2026 17:46
+This is XeTeX, Version 3.141592653-2.6-0.999998 (TeX Live 2026) (preloaded format=xelatex 2026.4.15)  22 APR 2026 19:57
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -1421,18 +1421,19 @@ LaTeX Font Warning: Font shape `OMS/LatinModernRoman(0)/m/n' undefined
 \tf@lof=\write7
 \openout7 = `thesis.lof'.
 
- [16] (./thesis.lot [17
+ [16] [17] (./thesis.lot [18
 
-] [18])
+] [19])
 \tf@lot=\write8
 \openout8 = `thesis.lot'.
 
- [19] [20
+ [20] [21] [22
 
 ]
 \openout2 = `chapters/ch1_introduction.aux'.
 
- (./chapters/ch1_introduction.tex
+
+(./chapters/ch1_introduction.tex
 Chapter 1.
 [1
 
@@ -1458,32 +1459,72 @@ ERIFY
 [8] [9] [10] [11] [12] [13] [14] [15]
 Missing character: There is no ) ("29) in font nullfont!
 LaTeX Font Info:    Font shape `TU/lmtt/bx/n' in size <6> not available
-(Font)              Font shape `TU/lmtt/b/n' tried instead on input line 392.
+(Font)              Font shape `TU/lmtt/b/n' tried instead on input line 394.
 [16] [17] [18]
-Underfull \hbox (badness 1838) in paragraph at lines 648--653
+Underfull \hbox (badness 1838) in paragraph at lines 650--655
 \TU/LatinModernRoman(0)/m/n/12 codes [[], [], []]. \TU/lmtt/m/n/12 OP_CAT \TU/L
 atinModernRoman(0)/m/n/12 (BIP-347) concatenates the top two stack elements.
  []
 
-[19] [20] [21] [22] [23]
-Underfull \hbox (badness 1259) in paragraph at lines 947--951
+[19] [20] [21]
+Underfull \hbox (badness 4096) in paragraph at lines 800--807
+[]\TU/LatinModernRoman(0)/m/n/12 Execution uses \TU/LatinModernRoman(0)/m/it/12
+ jets\TU/LatinModernRoman(0)/m/n/12 : when the validator encounters a known com
+binator sub-
+ []
+
+
+Underfull \hbox (badness 1924) in paragraph at lines 800--807
+\TU/LatinModernRoman(0)/m/n/12 tree (identified by its canonical Merkle root), 
+it executes a native C implemen-
+ []
+
+
+Underfull \hbox (badness 1701) in paragraph at lines 800--807
+\TU/LatinModernRoman(0)/m/n/12 tation instead of interpreting the combinators. 
+Jets for transaction introspection
+ []
+
+
+Underfull \hbox (badness 1199) in paragraph at lines 800--807
+\TU/LatinModernRoman(0)/m/n/12 (\TU/lmtt/m/n/12 jet::output_script_hash()\TU/La
+tinModernRoman(0)/m/n/12 , \TU/lmtt/m/n/12 jet::output_amount()\TU/LatinModernR
+oman(0)/m/n/12 , \TU/lmtt/m/n/12 jet::sig_all_hash()\TU/LatinModernRoman(0)/m/n
+/12 ), time-
+ []
+
+
+Overfull \hbox (48.60585pt too wide) in paragraph at lines 800--807
+\TU/LatinModernRoman(0)/m/n/12 locks (\TU/lmtt/m/n/12 jet::check_lock_distance(
+)\TU/LatinModernRoman(0)/m/n/12 ), and cryptographic primitives (\TU/lmtt/m/n/1
+2 jet::bip_0340_verify() \TU/LatinModernRoman(0)/m/n/12 [[]])
+ []
+
+
+Underfull \hbox (badness 7869) in paragraph at lines 808--815
+[]\TU/LatinModernRoman(0)/m/n/12 Our Simplicity vault enforces covenants by bin
+ding output 0 via two jets:
+ []
+
+[22] [23]
+Underfull \hbox (badness 1259) in paragraph at lines 950--954
 []\TU/LatinModernRoman(0)/m/n/12 Who may initiate the recovery path? Values:
  []
 
 
-Underfull \hbox (badness 3098) in paragraph at lines 964--969
+Underfull \hbox (badness 3098) in paragraph at lines 967--972
 []\TU/LatinModernRoman(0)/m/n/12 How is the withdrawal destination con-
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 964--969
+Underfull \hbox (badness 10000) in paragraph at lines 967--972
 \TU/LatinModernRoman(0)/m/n/12 strained? Values: \TU/lmtt/m/n/12 template-hash-
 digest\TU/LatinModernRoman(0)/m/n/12 , \TU/lmtt/m/n/12 per-output-amount+script
 \TU/LatinModernRoman(0)/m/n/12 ,
  []
 
 [24]
-Overfull \hbox (121.12508pt too wide) in paragraph at lines 1027--1040
+Overfull \hbox (121.12508pt too wide) in paragraph at lines 1030--1043
  [][] 
  []
 
@@ -1519,31 +1560,32 @@ e that fits within Bitcoin Core’s
  []
 
 [41] [42] [43] [44] [45]
-Underfull \hbox (badness 1881) in paragraph at lines 336--341
+Underfull \hbox (badness 10000) in paragraph at lines 336--341
  []\TU/LatinModernRoman(0)/b/n/12 Output-constrained recovery.[] \TU/LatinModer
-nRoman(0)/m/n/12 Unlike CAT+CSFS, the Simplicity vault enforces
+nRoman(0)/m/n/12 The Simplicity vault binds output 0 via
  []
 
 
-Underfull \hbox (badness 1043) in paragraph at lines 336--341
-\TU/LatinModernRoman(0)/m/n/12 output-constrained model and providing stronger 
-recovery safety than CAT+CSFS’s
+Underfull \hbox (badness 1394) in paragraph at lines 336--341
+\TU/lmtt/m/n/12 jet::output_script_hash(0) \TU/LatinModernRoman(0)/m/n/12 and \
+TU/lmtt/m/n/12 jet::output_amount(0) \TU/LatinModernRoman(0)/m/n/12 on \TU/Lati
+nModernRoman(0)/m/it/12 both \TU/LatinModernRoman(0)/m/n/12 trigger and re-
  []
 
-) [46]
+) [46] [47]
 \openout2 = `chapters/ch5_security.aux'.
 
  (./chapters/ch5_security.tex
 Chapter 5.
-[47
+[48
 
 
 
 
-] [48] [49] [50] [51] [52] [53] [54] [55] [56] [57] [58]
+] [49] [50] [51] [52] [53] [54] [55] [56] [57] [58] [59]
 Package pgfplots info on input line 541: Using 'lua backend=false' for axis: ym
 ode=log unsupported (yet).
- [59]
+ [60]
 
 LaTeX Font Warning: Font shape `OMS/LatinModernRoman(0)/b/n' undefined
 (Font)              using `OMS/LatinModernRoman(0)/m/n' instead on input line 6
@@ -1551,19 +1593,19 @@ LaTeX Font Warning: Font shape `OMS/LatinModernRoman(0)/b/n' undefined
 
 Missing character: There is no ) ("29) in font nullfont!
 Missing character: There is no ) ("29) in font nullfont!
-[60]
+[61]
 Underfull \hbox (badness 3158) in paragraph at lines 709--709
 []\TU/LatinModernRoman(0)/b/n/17.28 Class Z3: Per-UTXO Recovery-Cost Scaling
  []
 
-[61] [62] [63]
+[62] [63] [64]
 Underfull \hbox (badness 3417) in paragraph at lines 864--873
 []\TU/LatinModernRoman(0)/m/n/12 Substituting $\OML/cmm/m/it/12 ^^L$ \TU/LatinM
 odernRoman(0)/m/n/12 for $[][]$ in Equation [][]5.5[][] yields the batched dust
 -threshold
  []
 
-[64] [65] [66] [67] [68] [69]
+[65] [66] [67] [68] [69] [70]
 
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
 (hyperref)                removing `math shift' on input line 1240.
@@ -1572,7 +1614,7 @@ Package hyperref Warning: Token not allowed in a PDF string (Unicode):
 Package hyperref Warning: Token not allowed in a PDF string (Unicode):
 (hyperref)                removing `math shift' on input line 1240.
 
-[70] [71]
+[71] [72]
 Underfull \hbox (badness 10000) in paragraph at lines 1358--1359
 \TU/LatinModernRoman(0)/m/n/10 chain blocks
  []
@@ -1807,13 +1849,13 @@ Underfull \hbox (badness 10000) in paragraph at lines 1411--1412
 \TU/LatinModernRoman(0)/m/n/10 CHECKSIG =
  []
 
-[72] [73] [74] [75]
+[73] [74] [75] [76]
 Underfull \hbox (badness 4846) in paragraph at lines 1498--1500
 []\TU/LatinModernRoman(0)/m/n/12 None applicable — full vault bypass at constan
 t
  []
 
-[76] [77] [78] [79]
+[77] [78] [79] [80]
 Underfull \hbox (badness 1127) in paragraph at lines 1642--1647
 []\TU/LatinModernRoman(0)/m/n/12 A4 = \TU/lmtt/m/n/12 signature-dual-bind \TU/L
 atinModernRoman(0)/m/n/12 (CAT+CSFS) elimi-
@@ -1833,17 +1875,17 @@ man(0)/m/n/12 , \TU/lmtt/m/n/12 dedicated-opcode\TU/LatinModernRoman(0)/m/n/12
 ) as in
  []
 
-[80]) [81]
+[81]) [82]
 \openout2 = `chapters/ch6_verification.aux'.
 
  (./chapters/ch6_verification.tex
 Chapter 6.
-[82
+[83
 
 
 
 
-] [83]
+] [84]
 Underfull \hbox (badness 10000) in paragraph at lines 95--96
 []|\TU/LatinModernRoman(0)/m/n/10.95 Address reuse produces
  []
@@ -1853,7 +1895,7 @@ Underfull \hbox (badness 10000) in paragraph at lines 101--102
 []|\TU/LatinModernRoman(0)/m/n/10.95 Cold key extraction
  []
 
-[84]
+[85]
 Underfull \hbox (badness 10000) in paragraph at lines 177--178
 []|\TU/LatinModernRoman(0)/m/n/10.95 Reachable
  []
@@ -1908,43 +1950,43 @@ Underfull \hbox (badness 10000) in paragraph at lines 189--190
 \TU/LatinModernRoman(0)/m/n/10.95 rate (immediate
  []
 
-) [85] [86]
+) [86] [87]
 \openout2 = `chapters/ch7_discussion.aux'.
 
  (./chapters/ch7_discussion.tex
 Chapter 7.
-[87
+[88
 
 
 
 
 ]
-Overfull \hbox (0.71902pt too wide) in paragraph at lines 41--51
+Overfull \hbox (84.61792pt too wide) in paragraph at lines 41--51
  [][] 
  []
 
-[88] [89] [90] [91]) [92] [93]
+[89] [90] [91] [92]) [93] [94]
 \openout2 = `chapters/ch8_related_work.aux'.
 
  (./chapters/ch8_related_work.tex
 Chapter 8.
-[94
+[95
 
 
 
 
-] [95] [96] [97] [98])
+] [96] [97] [98] [99])
 Underfull \hbox (badness 2359) in paragraph at lines 205--230
 \TU/LatinModernRoman(0)/m/n/12 dependent security analysis for multiple covenan
 t vault designs. The individual
  []
 
-[99] [100]
+[100] [101]
 \openout2 = `chapters/ch9_conclusion.aux'.
 
  (./chapters/ch9_conclusion.tex
 Chapter 9.
-[101
+[102
 
 
 
@@ -1955,11 +1997,11 @@ Underfull \hbox (badness 10000) in paragraph at lines 59--69
 man(0)/m/n/12 We built a CAT+CSFS vault using explicit
  []
 
-[102] [103]) [104] (./thesis.bbl [105
+[103] [104]) [105] (./thesis.bbl [106
 
 
 
-] [106] [107] [108] [109]) [110] [111
+] [107] [108] [109] [110]) [111] [112
 
 
 ]
@@ -1990,48 +2032,61 @@ dernRoman(0)/m/n/12 Defines the abstract vault state machine: four states (\TU/
 lmtt/m/n/12 VAULTED\TU/LatinModernRoman(0)/m/n/12 ,
  []
 
-[112
+[113
 
 
-] [113] [114]) [115]
+] [114] [115]) [116]
 \openout2 = `chapters/app_c_simplicity.aux'.
 
  (./chapters/app_c_simplicity.tex
 Appendix B.
-[116
+[117
 
 
 
 
 ]
-Underfull \hbox (badness 10000) in paragraph at lines 36--40
-\TU/LatinModernRoman(0)/m/n/12 ple via \TU/lmtt/m/n/12 jet::outputs_hash() = pa
-ram::VAULT_RECOVER_OUTPUTS_HASH \TU/LatinModernRoman(0)/m/n/12 (see
+Underfull \hbox (badness 5022) in paragraph at lines 37--40
+[]\TU/LatinModernRoman(0)/m/n/12 A2 = \TU/lmtt/m/n/12 no \TU/LatinModernRoman(0
+)/m/n/12 (atomic) or \TU/lmtt/m/n/12 yes-bounded \TU/LatinModernRoman(0)/m/n/12
+ (bounded-partial with a compile-time
  []
 
-[117]
-Underfull \hbox (badness 1210) in paragraph at lines 90--97
+
+Underfull \hbox (badness 4595) in paragraph at lines 44--49
+\TU/lmtt/m/n/12 jet::output_script_hash(0) \TU/LatinModernRoman(0)/m/n/12 and \
+TU/lmtt/m/n/12 jet::output_amount(0) \TU/LatinModernRoman(0)/m/n/12 at compile 
+time,
+ []
+
+[118] [119]
+Overfull \hbox (119.49509pt too wide) in paragraph at lines 103--125
+ [][] 
+ []
+
+
+Underfull \hbox (badness 1210) in paragraph at lines 132--139
 \TU/LatinModernRoman(0)/m/n/12 Simplicity’s Coq-verified denotational semantics
  give stronger guarantees than Alloy
  []
 
-[118]) [119]
+[120]) [121]
 \openout2 = `chapters/app_d_rationality.aux'.
 
  (./chapters/app_d_rationality.tex
 Appendix C.
-[120
+[122
 
 
 
 
-] [121] [122] [123]
+] [123] [124] [125]
 Underfull \hbox (badness 1931) in paragraph at lines 165--174
  []\TU/LatinModernRoman(0)/b/n/12 (2) Defender model.[] \TU/LatinModernRoman(0)
 /m/n/12 A watchtower with recovery authority (keyless for CCV,
  []
 
-[124] [125] [126]
+[126] [127] [128]
 Underfull \hbox (badness 10000) in paragraph at lines 264--269
  []\TU/LatinModernRoman(0)/b/n/12 (5) Scope of validity.[] \TU/LatinModernRoman
 (0)/m/n/12 Applies iff A4 is one of {\TU/lmtt/m/n/12 template-hash-digest\TU/La
@@ -2045,13 +2100,13 @@ tt/m/n/12 dedicated-opcode\TU/LatinModernRoman(0)/m/n/12 } — i.e., any value o
 her than
  []
 
-[127] [128]
+[129] [130]
 Underfull \hbox (badness 1406) in paragraph at lines 344--346
  []\TU/LatinModernRoman(0)/b/n/12 (3) Economic preconditions.[] \TU/LatinModern
 Roman(0)/m/n/12 None applicable — full vault bypass at constant
  []
 
-[129]) [130] [131]
+[131]) [132] [133]
 
 Package caption Warning: Unused \captionsetup[sub] on input line 18.
 See the caption package documentation for explanation.
@@ -2071,15 +2126,15 @@ L3 programming layer <2026-03-20>
 LaTeX Font Warning: Some font shapes were not available, defaults substituted.
 
 Package rerunfilecheck Info: File `thesis.out' has not changed.
-(rerunfilecheck)             Checksum: 9F49807C0949E6133194359A2B637D14;24420.
+(rerunfilecheck)             Checksum: EBB7A2AF37EA38C51A8AD174F419C0F3;24582.
  ) 
 Here is how much of TeX's memory you used:
- 47717 strings out of 469533
- 1162351 string characters out of 5462676
- 1758703 words of memory out of 5000000
- 75696 multiletter control sequences out of 15000+600000
+ 47719 strings out of 469533
+ 1162399 string characters out of 5462676
+ 1759175 words of memory out of 5000000
+ 75698 multiletter control sequences out of 15000+600000
  638009 words of font info for 128 fonts, out of 8000000 for 9000
  319 hyphenation exceptions out of 8191
  125i,17n,131p,763b,2258s stack positions out of 10000i,1000n,20000p,200000b,200000s
 
-Output written on thesis.xdv (151 pages, 2641792 bytes).
+Output written on thesis.xdv (155 pages, 2678780 bytes).

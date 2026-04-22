@@ -108,39 +108,37 @@
 % ===================== Abstract =====================
 \begin{abstract}
 Bitcoin vaults encumber self-custodied funds with a time-delayed
-spending path, allowing a compromised hot-key spend to be intercepted
-and redirected to cold storage. Four script-extension proposals are
-presently under review as candidates for enabling this pattern.
-Practitioners must choose among them, yet no systematic cross-design
-security analysis has been published.
+spending path so that a compromised hot-key withdrawal can be
+intercepted by a watchtower and redirected to cold storage. Four
+script-extension proposals---\opctv{}, \opccv{}, \opvault{}, and
+\catcsfs{}---are candidates for enabling this pattern, yet
+practitioners choose among them without a peer-reviewed cross-design
+security analysis.
 
-We put forth a systematisation of the covenant-vault design space.
-Our approach decomposes each design into four nearly-orthogonal
-axes---a fee-payment model, an amount-flexibility policy, a
-recovery-gating mechanism, and a recovery binding---each of which
-deterministically opens a specific class of attack surface. We
-formalise a unified defender-loss metric combining theft, griefing,
-and dust-lockup outcomes, and identify a \emph{dominant corner} of
-the 4D lattice: the feature combination at which all four surfaces
-are closed simultaneously. No proposed Bitcoin Script extension
-occupies this corner; each falls short in at least one axis, and
-which axis it misses predicts the attack class that bites it.
+We decompose covenant vault designs along four axes---fee model,
+amount flexibility, recovery gating, and recovery binding---and show
+that each axis choice deterministically opens a specific attack
+surface. We instantiate all four designs on regtest under a uniform
+lifecycle interface, run 15 experiments, and verify structural
+properties using Alloy bounded model checking.
 
-We apply the framework to the four proposals, classify each in the
-lattice, and validate the predicted vulnerability profiles with 15
-regtest experiments and bounded model checking in Alloy (42
-assertions across five formal models). We additionally measure
-batched-recovery cost scaling and show that the safety ranking
-between two proposals inverts depending on whether the watchtower
-batches recovery---an operator-dependence that prior work has not
-surfaced. A Simplicity vault on a Bitcoin-adjacent federated
-sidechain serves as a cross-substrate reference point.
+We report three quantitative results. First, prior hand-estimates
+of \opvault{} transaction sizes are low by $45\%$, yielding a $36\%$
+lifecycle cost premium over \opccv{}. Second, \opccv{}'s watchtower
+splitting capacity reaches ${\sim}6{,}172$ splits per block---nearly
+$2\times$ the widely-cited prior estimate---with single-block
+exhaustion thresholds of $66\satvB$ for \opccv{} and $59\satvB$ for
+\opvault{} at a $0.5$~BTC vault. Third, under batched recovery those
+thresholds rise to $119\satvB$ and $159\satvB$, flipping the safety
+ranking between the two designs---an operator-strategy dependence
+prior work has not surfaced. We additionally prove a
+griefing--safety incompatibility: no covenant vault simultaneously
+achieves permissionless recovery and griefing resistance.
 
-Our work shows that the cost of custody is not a single number but
-a function of design choice, threat model, fee regime, and
-watchtower strategy, and identifies a structurally-safer corner of
-the design space that the current specification corpus has not yet
-occupied.
+The cost of custody is therefore not a single number. It is a
+function of design choice, threat model, fee regime, and watchtower
+strategy, and no current proposal minimises it against every
+adversary.
 \end{abstract}
 
 % ===================== Sections =====================
