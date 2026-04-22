@@ -191,7 +191,7 @@ The framework includes 15 experiments organized by scope category.
 | D | `revault_amplification` | CCV, OPV | Capability gap | Partial withdrawal chaining and cost accumulation |
 | E | `multi_input` | CTV, CCV, OPV, CAT, SIM | Capability gap | Batched trigger efficiency and cross-input accounting |
 | F | `recovery_griefing` | CTV, CCV, OPV, CAT, SIM | Comparative | Forced-recovery griefing: asymmetric cost analysis |
-| H | `watchtower_exhaustion` | CCV, OPV | Comparative | Revault-splitting watchtower fee exhaustion |
+| H | `watchtower_exhaustion` | CCV, OPV | Comparative | Per-UTXO recovery-cost scaling via partial-withdrawal chain (filename kept for git-history; conceptually class Z3) |
 | I | `ccv_mode_bypass` | CCV | Verification | BIP-443 OP_SUCCESS behavior on production vault taptrees |
 | J | `fee_sensitivity` | All (analytical) | Analytical | Fee environment sensitivity projections |
 | K | `opvault_recovery_auth` | OPV | Covenant-specific | Authorized recovery cost and anti-griefing tradeoff |
@@ -207,11 +207,11 @@ The four-way comparison reveals a distinct vulnerability profile for each covena
 
 **CTV** — Hot key compromise leads to fund theft (delayed by timelock). Fee pinning via anchor outputs. No revault means no splitting attacks. Address reuse causes permanent fund loss.
 
-**CCV** — Keyless recovery griefing (anyone can force-recover, lowest attacker bar). Watchtower fee exhaustion via revault splitting. No fee pinning (no anchor outputs). Safe address reuse. **Developer footgun: undefined CCV mode values (TM8) trigger OP_SUCCESS — specified BIP-443 behavior for forward compatibility, but a mode value outside {-1,0,1,2} in raw scripts causes complete covenant bypass.**
+**CCV** — Keyless recovery griefing (anyone can force-recover, lowest attacker bar; class Z2). Per-UTXO recovery-cost scaling via partial-withdrawal chain (class Z3). No fee pinning (no anchor outputs). Safe address reuse. **Developer footgun: undefined CCV mode values (TM8, class Z6) trigger OP_SUCCESSx — specified BIP-443 behavior for forward compatibility, but a mode value outside {-1,0,1,2} in raw scripts causes complete covenant bypass.**
 
-**OP_VAULT** — Authorized recovery blocks keyless griefing (requires recoveryauth key). Same revault-splitting vulnerability as CCV. Fee-input model eliminates pinning. Safe address reuse. Trigger key theft mitigated by watchtower + authorized recovery race.
+**OP_VAULT** — Authorized recovery blocks keyless griefing (requires recoveryauth key). Same class-Z3 per-UTXO recovery-cost scaling surface as CCV. Fee-input model eliminates pinning. Safe address reuse. Trigger key theft mitigated by watchtower + authorized recovery race.
 
-**CAT+CSFS** — Strongest hot-key theft resistance (griefing-only, no theft path — attacker can trigger but not redirect funds). Weakest cold-key recovery safety (unconstrained OP_CHECKSIG allows sweeping to any destination). No revault or batched triggers. Fee management via anchor outputs (similar pinning surface to CTV). Safe address reuse.
+**CAT+CSFS** — Strongest hot-key theft resistance (class Z4 immune — griefing-only, no theft path; attacker can trigger but not redirect funds because the dual OP_CHECKSIG + OP_CHECKSIGFROMSTACK binding forces output-equality via Schnorr EUF-CMA). Weakest cold-key recovery safety (class Z5 — unconstrained OP_CHECKSIG allows sweeping to any destination). No revault or batched triggers. Fee management via SIGHASH_SINGLE|ANYONECANPAY: the covenant signature commits to one input and one output, so external fee-paying inputs can be attached without breaking the covenant — no anchor output, no pinning surface analogous to CTV. Safe address reuse.
 
 ### Running by Category
 
