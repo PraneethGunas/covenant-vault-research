@@ -1,0 +1,191 @@
+\chapter{Discussion} \label{ch:discussion}
+
+This chapter addresses limitations of the methodology, discusses mitigations for
+the vulnerabilities identified, and identifies open problems for future work.
+
+% ======================================================================
+\section{Limitations} \label{se:limitations}
+
+\subsection{Regtest Environment}
+
+The regtest limitations detailed in Section~\ref{se:regtest_validity} bound the
+external validity of all measurements. The most significant gap is the absence of
+temporal dynamics: recovery races between the attacker's withdrawal and the
+watchtower's response are instantaneous on regtest but uncertain on mainnet, where
+block confirmation times are stochastic and mempool congestion affects transaction
+propagation. The No Pareto-Optimal Design theorem
+(Proposition~\ref{thm:fee_inversion}) is robust to this gap because its
+per-threat orderings rest on structural vsize measurements rather than
+timing---but the \emph{practical feasibility} of per-UTXO recovery-cost scaling
+at a given fee rate depends on how quickly the attacker can fill
+blocks with split transactions, which regtest cannot test.
+
+\subsection{Reference Implementations} \label{se:impl_choices}
+
+This work studies covenant \emph{designs} (BIPs), not implementations. However, the
+measurements come from specific reference implementations, and implementation choices
+affect the measured vsize. The most significant example is OP\_VAULT's fee-input
+requirement: the 292\vB{} trigger measurement includes a fee-wallet input that is
+inherent to BIP-345's value preservation rule, not an implementation artifact. But
+CTV's 3{,}300-sat anchor output and CAT+CSFS's unconstrained recovery leaf are
+implementation choices, not BIP requirements. Table~\ref{tab:impl_choices} lists
+the design choices in the two author-built implementations (CAT+CSFS and Simplicity)
+that could affect measured properties.
+
+\begin{table}[t]
+\centering
+\caption{Implementation choices in author-built vaults. These are design decisions,
+not BIP requirements; alternative designs would produce different measurements.}
+\label{tab:impl_choices}
+\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+Choice & Covenant & BIP-required? & Alternative \\
+\midrule
+Fixed destination        & CAT+CSFS & No  & Poelstra's dynamic destination~\cite{Poe21} \\
+Unconstrained recovery   & CAT+CSFS & No  & Output-constrained (like Simplicity) \\
+500-sat fixed fee        & Simplicity & No & Dynamic fee estimation \\
+3{,}300-sat anchor       & CTV (upstream) & No & Different anchor size \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Rational Adversary Assumption}
+
+The economic analysis assumes a rational adversary who mounts an attack only when
+$\text{attack\_cost} < \text{vault\_value}$. This excludes irrational adversaries
+(state actors, ideologically motivated attackers) who may attack regardless of cost.
+It also excludes sophisticated attackers who combine covenant-level attacks with
+network-level attacks (eclipse, time-dilation) to improve their success probability.
+
+\subsection{Threats Not Modeled} \label{se:threats_not_modeled}
+
+The TM1--TM11 threat taxonomy covers covenant-specific attack classes but excludes
+several categories that apply equally to all vault designs:
+
+\begin{itemize}
+\item \textbf{TM3 race dynamics are network-layer, not Script-layer.}
+  Our design-space decomposition
+  (Section~\ref{ss:design_space}) does not model the race between
+  the attacker's unvault-plus-withdrawal sequence and the
+  watchtower's recovery broadcast. Formalising
+  $\Pr_D[\text{attacker wins race}]$ would require a separate
+  probability space over block-arrival times, mempool propagation
+  delays, and detection latency---parameters that depend on the
+  deployment environment (mainnet, regtest, signet) rather than on
+  BIP script semantics. Existing watchtower and payment-channel
+  formalisations in the state-channel literature treat confirmation
+  as atomic or assume bounded-delay synchrony; none provides
+  off-the-shelf machinery for a pinning-composed race against
+  a Bitcoin mempool. We therefore treat TM3 as uniformly
+  applicable to all four BIPs at the Script layer. CAT+CSFS's
+  dual-binding on the hot leaf is the one design-level mitigation
+  in our taxonomy: it reduces the worst-case outcome from theft to
+  griefing (see Section~\ref{se:trigger_theft}). A formal network-layer
+  race model is left for future work.
+
+\item \textbf{Mining-level attacks.} An attacker with significant hash power could
+  withhold blocks to compress CSV timelocks, reducing the watchtower's response
+  window. This interacts with TM3 and TM4 but is not covenant-specific.
+
+\item \textbf{Network-level attacks.} Eclipse attacks could prevent a watchtower from
+  observing unvault transactions, giving the attacker a head start on the CSV race.
+
+\item \textbf{Watchtower availability.} All vault designs assume the watchtower is
+  online during the CSV window. DDoS attacks targeting the watchtower infrastructure
+  are a deployment concern orthogonal to covenant design.
+
+\item \textbf{Multisig key management.} Production vaults would use multisig (e.g.,
+  2-of-3 cold keys). The interaction between threshold signing schemes and covenant
+  enforcement is not addressed.
+
+\item \textbf{Dust limit changes.} The per-UTXO recovery-cost scaling analysis assumes current
+  dust limits (${\sim}546$~sats). Changes to dust relay policy would shift the
+  economic floor at which splits become unrecoverable.
+\end{itemize}
+
+These threats are orthogonal to the covenant-specific properties measured in this
+work. They represent important deployment considerations but do not affect the
+relative ranking of covenant designs.
+
+% ======================================================================
+\section{Mitigations} \label{se:mitigations}
+
+\subsection{TRUC/v3 Transactions}
+
+TRUC (Topologically Restricted Until Confirmation), also known as v3 transactions,
+limits descendant chains to a single transaction. TRUC was merged into Bitcoin Core
+28.0~\cite{CoreRelay} and is available on mainnet as an opt-in relay policy.
+If CTV vault transactions adopt TRUC, the 25-descendant fee pinning vector (TM1)
+is eliminated at the relay policy level. This would remove CTV's primary
+vulnerability, potentially shifting its
+security profile: without fee pinning, CTV's worst-case attack becomes address reuse
+(TM7), which is a user error preventable by wallet software rather than an adversarial
+exploit. The TM1 row of the master threat matrix (and hence the CTV
+branch of Proposition~\ref{thm:fee_inversion}'s counterexample
+enumeration) would need re-evaluation under TRUC, as CTV would no
+longer have a fee-invariant worst case under~TM1.
+
+\subsection{Batched Recovery}
+
+Class \classscale{} (TM4) is materially mitigated by batching
+recovery transactions. Instead of recovering each split UTXO
+individually, the watchtower combines multiple UTXOs into a single
+recovery transaction, amortising fixed overhead across inputs. We
+measure batched recovery on regtest for both CCV and OP\_VAULT
+(Section~\ref{ss:batched_defender}); the fitted linear scaling is
+$54 + 68 N$\vB{} for CCV and $154 + 92 N$\vB{} for OP\_VAULT. The
+dust-threshold fee rate~$r^\dagger$ rises by $1.8\times$~(CCV) and
+$2.7\times$~(OP\_VAULT), and the CCV/OP\_VAULT ordering under TM4
+reverses relative to the single-input case.
+
+\subsection{Poelstra Reset Model}
+
+CAT+CSFS's cold key vulnerability (TM11) can be mitigated by replacing the bare
+\texttt{OP\_CHECKSIG} recovery leaf with a recursive staging reset, as proposed by
+Poelstra~\cite{Poe21}. Under this design, cold key compromise initiates a liveness
+battle: the attacker resets the vault, the owner triggers a new withdrawal, the
+attacker resets again. Each round costs both parties transaction fees. This converts
+immediate theft into sustained denial of service, matching OP\_VAULT's security
+profile under dual-key compromise. The tradeoff is a larger recovery script and
+additional witness overhead.
+
+% ======================================================================
+\section{Open Problems} \label{se:open_problems}
+
+\paragraph{Temporal verification.}
+The Alloy models verify structural reachability but not timing properties. A TLA+
+or UPPAAL model could capture the recovery race dynamics: given a CSV delay of
+$d$~blocks, a block interval distribution, and network propagation delays, what is
+the probability that the watchtower's recovery confirms before the attacker's
+withdrawal? This would complement the structural verification with probabilistic
+timing guarantees.
+
+\paragraph{Cryptographic verification.}
+The Alloy models abstract signatures as key-possession checks. A Tamarin or ProVerif
+model could verify the cryptographic binding properties: that the CAT+CSFS dual
+verification is sound under the Schnorr signature scheme, that CTV template hashes
+are collision-resistant under SHA-256, and that Simplicity's jet-based verification
+is equivalent to the combinator semantics. O'Connor's Coq formalization of
+Simplicity~\cite{OC17} provides a foundation for this direction.
+
+\paragraph{Cluster mempool impact.}
+The ongoing Bitcoin Core cluster mempool redesign replaces per-transaction
+ancestor/descendant limits with cluster-based evaluation~\cite{WD24}. This could
+fundamentally change the fee pinning calculus: the 25-descendant limit exploited in
+TM1 may be replaced by cluster size limits with different eviction logic. Measuring
+the fee pinning attack under cluster mempool rules would determine whether CTV's
+primary vulnerability survives the policy change.
+
+\paragraph{Replacement cycling.}
+Riard~\cite{Ria23} demonstrated transaction replacement cycling attacks against
+Lightning Network HTLCs. The same class of attack may apply to covenant vaults:
+an attacker could cycle the watchtower's recovery transaction out of the mempool
+by repeatedly replacing it with conflicting transactions. This interaction between
+covenant security and mempool replacement policy is unexplored.
+
+\paragraph{Multi-vault composition.}
+Real-world deployments would use multiple vaults simultaneously. The interaction
+between concurrent vault operations---fee wallet contention in OP\_VAULT, UTXO set
+management across vaults, and cross-vault batching opportunities---introduces
+composition effects not captured by single-vault analysis.

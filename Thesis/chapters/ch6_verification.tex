@@ -1,0 +1,197 @@
+\chapter{Formal Verification} \label{ch:verification}
+
+This chapter describes the Alloy bounded model checking methodology used to verify
+structural properties of the five covenant vault designs. Section~\ref{se:alloy_bg}
+introduces Alloy and its applicability to protocol verification.
+Section~\ref{se:properties_verified} defines the properties checked and reports
+results. Section~\ref{se:three_layer} describes how the formal, empirical, and
+economic evidence layers reinforce each other. The full model architecture and
+per-covenant detailed results appear in Appendix~\ref{app:alloy_details}.
+
+% ======================================================================
+\section{Alloy and Bounded Model Checking} \label{se:alloy_bg}
+
+Alloy~\cite{Jackson12} is a declarative modeling language with automatic bounded
+analysis. An Alloy model specifies a universe of \emph{signatures} (types),
+\emph{relations} (fields), and \emph{constraints} (facts and predicates). The Alloy
+Analyzer exhaustively searches all instances within a user-specified \emph{scope}
+(maximum number of atoms per signature) to find counterexamples to assertions or
+satisfying instances for predicates.
+
+Alloy's bounded model checking is well-suited to protocol verification for two reasons.
+First, the small-scope hypothesis---if a property has a counterexample, it typically
+has one within a small bound---means that modest scopes (6--10 atoms) provide high
+confidence without exploring astronomically large state spaces. Second, Alloy's
+relational logic naturally expresses state machines, ownership relations, and
+authorization policies that characterize vault protocols.
+
+dgpv~\cite{dgpv24} applied Alloy to verify a single OP\_CAT vault prototype
+(Rijndael's design~\cite{Rij24}), checking fund conservation and covenant enforcement
+within that one design. Our work extends this approach to all four BIP-specified
+covenant protocols plus Simplicity, using a shared base model to ensure uniform
+property definitions across designs. The models comprise 9 Alloy files: two base
+modules (\texttt{btc\_base}, \texttt{vault\_base}), five concrete vault models,
+a threat model module, and a cross-covenant interaction module.
+
+% ======================================================================
+\section{Properties and Results} \label{se:properties_verified}
+
+We verify three categories of structural properties across the five vault designs.
+
+\paragraph{Fund conservation.}
+No transaction in the vault lifecycle creates value:
+
+\begin{equation} \label{eq:fund_conservation}
+\forall\, t \in \text{Transactions}:
+  \sum_{\text{out} \in t.\text{outputs}} \text{out.amount}
+  \leq \sum_{\text{in} \in t.\text{inputs}} \text{in.amount}
+\end{equation}
+
+\paragraph{No-extraction.}
+An attacker with a specified key set cannot increase their holdings through any
+sequence of vault transitions:
+
+\begin{equation} \label{eq:no_extraction}
+\forall\, \text{path} \in \text{Executions},\;
+\forall\, a \in \text{Attackers}:
+  a.\text{holdings}_{\text{final}} \leq a.\text{holdings}_{\text{initial}}
+\end{equation}
+
+\noindent
+We check this under three attacker profiles per design: no keys, hot key only, and
+cold key only. The one expected failure is CAT+CSFS under cold-key-only compromise:
+the Alloy model finds a counterexample where the cold key holder redirects recovery
+funds to an arbitrary address, structurally confirming TM11
+(Section~\ref{se:cold_key_recovery}).
+
+\paragraph{Recovery liveness.}
+From any reachable vault state, a recovery transition exists:
+
+\begin{equation} \label{eq:recovery_liveness}
+\forall\, s \in \{\text{Funded}, \text{Triggered}\}:
+  \exists\, t \in \text{Transitions}:\;
+  t.\text{source} = s \;\wedge\; t.\text{target} = \text{Recovered}
+\end{equation}
+
+\noindent
+This holds for all five designs. In OP\_VAULT, recovery requires the
+\texttt{recoveryauth} key---the transition exists but is gated by key possession.
+
+\paragraph{Summary of results.}
+The Alloy Analyzer checked 41 assertions and found satisfying instances for
+25 scenario predicates. Table~\ref{tab:alloy_results} summarizes the results.
+
+\begin{table}[t]
+\centering
+\caption{Alloy verification results. 34 of 35 safety checks pass; the one
+failure confirms cold key extraction in CAT+CSFS (TM11).}
+\label{tab:alloy_results}
+\small
+\begin{tabular}{@{}lccp{4.5cm}@{}}
+\toprule
+Model & Checks & Scenarios & Key findings \\
+\midrule
+CTV        & 6 pass & 3 instances &
+  Address reuse produces stuck UTXO \\
+CCV        & 7 pass & 5 instances &
+  Griefing reachable; mode confusion contained \\
+OP\_VAULT  & 8 pass & 6 instances &
+  Dual-key = DoS not theft; key-loss = permanent \\
+CAT+CSFS   & 5 pass, 1 fail$^*$ & 3 instances &
+  Cold key extraction (TM11) confirmed \\
+Simplicity & 6 pass & 3 instances &
+  Recovery constrained; hot key = grief only \\
+Cross       & 2 pass & 5 instances &
+  No cross-vault injection \\
+\midrule
+\textbf{Total} & \textbf{34 pass, 1 fail} & \textbf{25 instances} & \\
+\bottomrule
+\end{tabular}
+
+\vspace{4pt}
+{\footnotesize $^*$Expected failure: Alloy finds a counterexample confirming that
+cold key compromise enables fund extraction (TM11).}
+\end{table}
+
+% ======================================================================
+\section{Three-Layer Evidence Methodology} \label{se:three_layer}
+
+The formal verification complements the empirical measurements and economic projections
+to form a three-layer evidence methodology (Figure~\ref{fig:three_layer}). Each layer
+answers a different question about the same attack:
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+  layer/.style={rectangle, draw, rounded corners=4pt, minimum width=10cm,
+                minimum height=1.2cm, font=\small, align=center},
+  >=stealth, thick,
+]
+  \node[layer, fill=purple!10] (alloy)
+    {\textbf{Layer 1: Alloy (structural)}\\
+     ``Is this attack \emph{possible} in the state machine?''};
+  \node[layer, fill=green!10, below=0.5cm of alloy] (regtest)
+    {\textbf{Layer 2: Regtest (empirical)}\\
+     ``\emph{How much} does this attack cost in vsize?''};
+  \node[layer, fill=orange!10, below=0.5cm of regtest] (fee)
+    {\textbf{Layer 3: Fee model (economic)}\\
+     ``\emph{When} is this attack rational at fee rate~$r$?''};
+
+  \draw[->] (alloy) -- node[right, font=\footnotesize] {possible $\rightarrow$ measure} (regtest);
+  \draw[->] (regtest) -- node[right, font=\footnotesize] {vsize $\rightarrow$ project} (fee);
+\end{tikzpicture}
+\caption{Three-layer evidence methodology. Alloy determines structural possibility.
+Regtest measures concrete costs. The fee model projects costs into real-world
+fee environments to determine economic rationality.}
+\label{fig:three_layer}
+\end{figure}
+
+\begin{itemize}
+\item \textbf{Layer 1 (Alloy): Is the attack structurally possible?}
+  If the Alloy check passes (no counterexample), the attack is structurally
+  impossible within the modeled scope. If a counterexample is found, the attack
+  is possible and proceeds to Layer~2.
+
+\item \textbf{Layer 2 (Regtest): How much does it cost?}
+  The regtest experiments measure the concrete vsize of the attack and defense
+  transactions, converting a structural possibility into a quantitative cost.
+
+\item \textbf{Layer 3 (Fee model): When is it rational?}
+  The fee projection model (Equation~\ref{eq:fee_projection}) converts vsize into
+  sats at each fee rate, and the rationality condition
+  (Equation~\ref{eq:rationality}) determines when the attack is economically justified.
+\end{itemize}
+
+Table~\ref{tab:three_layer} illustrates the alignment for three representative attacks.
+
+\begin{table}[t]
+\centering
+\caption{Three-layer evidence alignment for representative attacks.}
+\label{tab:three_layer}
+\small
+\begin{tabular}{@{}lp{2.5cm}p{3cm}p{3.5cm}@{}}
+\toprule
+Attack & Alloy (Layer 1) & Regtest (Layer 2) & Fee model (Layer 3) \\
+\midrule
+CCV griefing (TM2)
+  & Reachable (keyless recovery exists)
+  & 122\vB{}/round attacker, 454\vB{}/round defender
+  & Rational at all fee rates; $\gamma = 0.27$ \\[6pt]
+
+CTV fee pinning (TM1)
+  & Reachable (anchor output spendable)
+  & 14{,}300~sats total
+  & Rational whenever vault $> 20{,}000$~sats \\[6pt]
+
+CAT+CSFS cold theft (TM11)
+  & Counterexample found (cold key extracts)
+  & 125\vB{} recovery tx
+  & Rational at any fee rate (immediate theft) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The three layers reinforce each other: Alloy gives confidence that the regtest
+experiments measure the right attacks (no missed paths), the regtest measurements
+give concrete costs to the Alloy-identified possibilities, and the fee model
+transforms those costs into deployment guidance.

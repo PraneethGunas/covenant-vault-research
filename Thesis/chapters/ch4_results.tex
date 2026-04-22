@@ -1,0 +1,346 @@
+\chapter{Empirical Results} \label{ch:results}
+
+This chapter presents the measured transaction sizes and cost data that form the
+empirical basis for the security analysis in Chapter~\ref{ch:security}.
+Section~\ref{se:lifecycle_measurements} reports the core lifecycle vsize measurements.
+Section~\ref{se:opvault_correction} documents the correction of prior OP\_VAULT
+estimates. Section~\ref{se:batching_results} presents batching efficiency data.
+Section~\ref{se:revault_results} measures revault amplification costs.
+Section~\ref{se:address_reuse_results} reports address reuse behavior.
+Section~\ref{se:simplicity_measurements} presents the Simplicity vault measurements
+separately.
+
+% ======================================================================
+\section{Lifecycle Cost Measurements} \label{se:lifecycle_measurements}
+
+Table~\ref{tab:lifecycle} shows the measured vsize for each transaction in the
+deposit--trigger--withdraw lifecycle across all five covenant designs. These
+measurements are the foundation for all subsequent cost analysis: every attack cost
+function, fee sensitivity projection, and cross-covenant comparison in this thesis
+derives from these structural vsize values.
+
+\begin{table}[t]
+\centering
+\caption{Lifecycle vsize measurements for the four Bitcoin
+covenant designs. Each value is regtest-measured and structurally
+deterministic (range = 0 across repeated measurements). Lifecycle
+total = tovault + trigger + withdraw (the happy-path cost). Simplicity
+(Elements) measurements appear in Appendix~C. The \emph{axis measured}
+column identifies the primary axis
+(Table~\ref{tab:design_space_position}) whose position determines the
+row's cost structure.}
+\label{tab:lifecycle}
+\begin{tabular}{@{}lrrrrcl@{}}
+\toprule
+Covenant & tovault & trigger & withdraw & recover & \textbf{total}  & axis measured                                                 \\
+         & (vB)    & (vB)    & (vB)     & (vB)    & \textbf{(vB)}   &                                                               \\
+\midrule
+CTV        & 122 &  94 & 152 & 133 & \textbf{368} & \axfee{}=anchor, \axwdbind{}=digest          \\
+CCV        & 300 & 154 & 111 & 122 & \textbf{565} & \axrevault{}=yes, \axfee{}=dynamic           \\
+OP\_VAULT  & 154 & 292 & 121 & 246 & \textbf{567} & \axrevault{}=yes, \axfee{}=dynamic (wallet)  \\
+CAT+CSFS   & 122 & 221 & 210 & 125 & \textbf{553} & \axwdbind{}=dual-bind, \axfee{}=ACP          \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+CTV has the cheapest lifecycle at 368\vB{}, owing to its minimal script structure: the
+trigger (unvault) transaction is a bare CTV hash check with no signature, producing
+the smallest trigger of any design at 94\vB{}. CCV and OP\_VAULT have nearly identical
+lifecycle totals (565 and 567\vB{}), but with opposite cost distributions: CCV's
+trigger is cheap (154\vB{}) and its deposit is expensive (300\vB{} due to the
+two-output contract instance structure), while OP\_VAULT's trigger is expensive
+(292\vB{} due to the fee-wallet input) and its deposit is moderate (154\vB{}).
+CAT+CSFS falls between CTV and CCV/OP\_VAULT at 553\vB{}, with the dual CSFS+CHECKSIG
+introspection pattern adding witness overhead to both trigger (221\vB{}) and withdrawal
+(210\vB{}).
+
+The lifecycle cost at a given fee rate~$r$ (in sat/vB) is:
+
+\begin{equation} \label{eq:lifecycle_cost}
+C_{\text{lifecycle}}(r) = (\text{vsize}_{\text{tovault}} + \text{vsize}_{\text{trigger}}
+  + \text{vsize}_{\text{withdraw}}) \times r
+\end{equation}
+
+\noindent
+At the median 2024 fee rate of 50\satvB{}, a single vault lifecycle costs 18{,}400~sats
+(CTV), 28{,}250~sats (CCV), 28{,}350~sats (OP\_VAULT), or 27{,}650~sats (CAT+CSFS).
+
+% ======================================================================
+\section{OP\_VAULT Vsize Correction} \label{se:opvault_correction}
+
+Prior to this work, the only published transaction size estimates for OP\_VAULT were
+informal hand-calculations. Table~\ref{tab:opvault_correction} compares these estimates
+against our regtest measurements.
+
+\begin{table}[t]
+\centering
+\caption{OP\_VAULT vsize corrections. Prior estimates are from informal community
+discussion; measured values are from regtest lifecycle runs on the
+\texttt{opvault-demo} reference implementation.}
+\label{tab:opvault_correction}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+Transaction & Prior estimate & Measured & Delta \\
+\midrule
+trigger (\texttt{start\_withdrawal})  & ${\sim}200$\vB{} & 292\vB{} & $+46\%$ \\
+recovery (\texttt{OP\_VAULT\_RECOVER}) & ${\sim}170$\vB{} & 246\vB{} & $+45\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The discrepancy originates from the fee-input requirement described in
+Section~\ref{se:opvault}. OP\_VAULT's value preservation rule prohibits spending the
+vault UTXO alone (the fee would violate input--output balance), so every trigger and
+recovery transaction includes a second input from a fee wallet. This adds a P2TR
+input witness (approximately 80--90\vB{}) that prior estimates omitted. The
+consequence is a 36\% lifecycle cost premium over CCV: OP\_VAULT's lifecycle
+(567\vB{}) versus CCV's (565\vB{}) appears similar in total, but OP\_VAULT pays
+80--90\vB{} more for every non-deposit transaction. Over time, the accumulated
+overhead is significant for vault operators who trigger frequently.
+
+This measurement contributed to the economic case for withdrawing BIP-345 in favor
+of BIP-443~\cite{OB25}: the purpose-built opcodes' fee-input overhead costs more
+than the generic CCV approach achieves with the same vault semantics.
+
+% ======================================================================
+\section{Batching Efficiency} \label{se:batching_results}
+
+CCV and OP\_VAULT can combine multiple vault UTXOs into a single trigger transaction.
+CTV and CAT+CSFS cannot batch because each vault's template hash (CTV) or embedded
+\texttt{sha\_single\_output} (CAT+CSFS) commits to a specific output structure that
+changes with each additional input.
+
+Table~\ref{tab:batching} shows the measured trigger vsize at increasing batch sizes.
+Both CCV and OP\_VAULT exhibit linear scaling with a fixed base cost and a constant
+marginal cost per additional vault.
+
+\begin{table}[t]
+\centering
+\caption{Batched trigger vsize measurements. CCV and OP\_VAULT are measured from
+actual multi-input transactions on regtest. CTV and CAT+CSFS cannot batch.}
+\label{tab:batching}
+\begin{tabular}{@{}lrrrrrr@{}}
+\toprule
+& \multicolumn{6}{c}{Batch size ($N$ vaults)} \\
+\cmidrule(l){2-7}
+Covenant & $N{=}1$ & $N{=}2$ & $N{=}3$ & $N{=}5$ & $N{=}10$ & $N{=}20$ \\
+\midrule
+CCV       & 154 & 254  & 355   & 555   & 1{,}056  & 2{,}059 \\
+OP\_VAULT & 292 & 385  & 479   & 667   & 1{,}135  & 2{,}073 \\
+\midrule
+\multicolumn{7}{@{}l}{\footnotesize CTV, CAT+CSFS: $N \times$ single trigger
+(154\vB{}, 221\vB{} respectively)} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The batching efficiency follows a linear model:
+
+\begin{equation} \label{eq:batching}
+\text{vsize}_{\text{batch}}(N) = \text{base} + \text{marginal} \times N
+\end{equation}
+
+\noindent
+For CCV, the marginal cost is ${\sim}100$\vB{} per additional vault (base
+${\sim}54$\vB{}). For OP\_VAULT, the marginal cost is ${\sim}94$\vB{} per vault
+(base ${\sim}198$\vB{}). The marginal cost per vault in a batch is substantially
+lower than the cost of individual triggers (154\vB{} for CCV, 292\vB{} for
+OP\_VAULT), demonstrating the efficiency gain from amortizing the transaction
+overhead across multiple inputs.
+
+The standardness ceiling---the maximum batch size that fits within Bitcoin Core's
+400{,}000~WU transaction weight limit---can be projected from these measurements:
+
+\begin{equation} \label{eq:ceiling}
+N_{\max} = \left\lfloor \frac{400{,}000 - \text{base\_weight}}
+  {\text{marginal\_weight}} \right\rfloor
+\end{equation}
+
+\noindent
+For CCV, $N_{\max} \approx 1{,}000$ vaults per transaction. For OP\_VAULT,
+$N_{\max} \approx 1{,}064$ vaults. In practice, batch sizes above 50--100 are rare
+in custodial operations, so the standardness limit does not constrain realistic
+deployments.
+
+% ======================================================================
+\section{Revault Amplification} \label{se:revault_results}
+
+CCV and OP\_VAULT support partial withdrawals: the vault owner withdraws a portion
+of the vault balance and re-locks the remainder in a new vault UTXO. This process
+can be repeated, creating a chain of partial withdrawals from a single initial
+deposit.
+
+The cost of each withdrawal step is the sum of the trigger (or trigger-and-revault)
+and the withdrawal completion. Table~\ref{tab:revault} shows the per-step and
+cumulative costs measured across 9~successive partial withdrawals of 5{,}000{,}000~sats
+each from an initial 49{,}999{,}900-sat vault.
+
+\begin{table}[t]
+\centering
+\caption{Revault amplification. Per-step withdrawal vsize is constant across steps
+because the script structure does not change with balance. CTV and CAT+CSFS cannot
+revault natively; their cost is the full unvault--withdraw cycle per withdrawal.}
+\label{tab:revault}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+Covenant & Per-step vsize & Cumulative (5 steps) & Cumulative (9 steps) \\
+\midrule
+CCV       & 111\vB{} & 555\vB{} & 999\vB{} \\
+OP\_VAULT & 121\vB{} & 605\vB{} & 1{,}089\vB{} \\
+\midrule
+CTV (extrapolated)      & 246\vB{} & 1{,}230\vB{} & 2{,}214\vB{} \\
+CAT+CSFS (extrapolated) & 431\vB{} & 2{,}155\vB{} & 3{,}879\vB{} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The per-step vsize is constant across all 9~steps for both CCV and OP\_VAULT, confirming
+the structural determinism of the measurement. CCV's smaller per-step cost (111\vB{}
+vs.\ 121\vB{}) reflects its lighter withdrawal transaction (no fee-input overhead).
+
+For CTV and CAT+CSFS, which lack native revault, each partial withdrawal requires a
+full cycle: unvault the entire balance, withdraw the desired portion, and re-deposit
+the remainder in a new vault. The extrapolated per-step cost is the sum of the trigger
+and withdrawal vsizes for a single cycle. This is 2.2$\times$ (CTV) to 3.9$\times$
+(CAT+CSFS) more expensive than CCV's native revault per step.
+
+The cumulative cost has implications for the per-UTXO recovery-cost scaling attack analyzed in
+Chapter~\ref{ch:security}: an attacker chaining many small partial withdrawals forces
+the watchtower to pay recovery fees proportional to the number of splits.
+
+% ======================================================================
+\section{Address Reuse} \label{se:address_reuse_results}
+
+CTV is the only design where address reuse causes permanent fund loss. A second deposit
+to the same CTV address creates a UTXO whose amount does not match the committed
+template hash. The template commits to output amounts derived from the \emph{original}
+deposit, so the second UTXO is either permanently unspendable (if the deposit is
+smaller) or overpays miners by the difference (if larger).
+
+CCV, OP\_VAULT, CAT+CSFS, and Simplicity all handle multiple deposits to the same
+address safely. CCV and OP\_VAULT use per-instance contract checking---each UTXO is
+independently validated against the covenant rules regardless of how many UTXOs share
+the same address. CAT+CSFS generates a unique vault plan per source coin, producing
+distinct P2TR addresses. Simplicity creates fresh plans with new addresses for each
+vault instance.
+
+This is a design-level property, not an implementation artifact: CTV's template hash
+commits to input count and output amounts, making it structurally incompatible with
+variable deposit amounts. The other designs either validate per-input (CCV, OP\_VAULT)
+or per-instance (CAT+CSFS, Simplicity).
+
+% ======================================================================
+\section{Fee Sensitivity Projections} \label{se:fee_sensitivity_results}
+
+Experiment~J projects the measured vsize data from the preceding sections into
+real-world fee environments using the linear fee model
+(Equation~\ref{eq:fee_projection}). Table~\ref{tab:fee_sensitivity} shows the
+lifecycle cost and key attack costs across six historically observed fee rates.
+
+\begin{table}[t]
+\centering
+\caption{Fee sensitivity projections. Lifecycle cost =
+$\text{vsize}_{\text{total}} \times r$. Fee pinning cost is fee-invariant.
+Recovery griefing cost is the defender's per-round cost. Watchtower exhaustion
+shows the number of splits needed to exhaust a 0.5~BTC vault to dust.}
+\label{tab:fee_sensitivity}
+\footnotesize
+\begin{tabular}{@{}rrrrrrrr@{}}
+\toprule
+& \multicolumn{4}{c}{Lifecycle cost (sats)} & Fee pin & Grief & WT exhaust \\
+\cmidrule(lr){2-5}
+$r$ (sat/vB) & CTV & CCV & OPV & CAT & (CTV) & (CCV) & splits \\
+\midrule
+1   &     368 &     565 &     567 &     553 & 14{,}300 &    454 & 409{,}836 \\
+10  &   3{,}680 &   5{,}650 &   5{,}670 &   5{,}530 & 14{,}300 &  4{,}540 &  40{,}984 \\
+50  &  18{,}400 &  28{,}250 &  28{,}350 &  27{,}650 & 14{,}300 & 22{,}700 &   8{,}197 \\
+100 &  36{,}800 &  56{,}500 &  56{,}700 &  55{,}300 & 14{,}300 & 45{,}400 &   4{,}098 \\
+300 & 110{,}400 & 169{,}500 & 170{,}100 & 165{,}900 & 14{,}300 & 136{,}200 &  1{,}366 \\
+500 & 184{,}000 & 282{,}500 & 283{,}500 & 276{,}500 & 14{,}300 & 227{,}000 &    820 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Three observations emerge from the projections:
+
+\begin{itemize}
+\item \textbf{Fee pinning is fee-invariant.} The 14{,}300-sat pinning cost
+  (Section~\ref{se:fee_pinning}) is constant across all fee environments because
+  the attacker pays dust-rate fees regardless of prevailing rates. At a 0.5~BTC
+  vault value, pinning costs 0.03\% of the vault---well below any rationality
+  threshold at any historical fee rate.
+
+\item \textbf{Lifecycle cost rankings are stable.} CTV is the cheapest at every fee
+  rate. CCV and OP\_VAULT are nearly identical (within 0.4\%). CAT+CSFS falls between
+  CTV and CCV/OP\_VAULT. The ranking does not change with fees because the vsize
+  ratios are constant.
+
+\item \textbf{Watchtower exhaustion feasibility is fee-dependent.} At 1\satvB{},
+  exhausting a 0.5~BTC vault requires ${\sim}410{,}000$ splits (infeasible---66 blocks
+  of maximum-rate splitting). At 300\satvB{}, it requires only 1{,}366 splits
+  (feasible in a single block). This fee-dependent transition is the empirical basis
+  for Proposition~\ref{thm:fee_inversion} in Chapter~\ref{ch:security}.
+\end{itemize}
+
+% ======================================================================
+\section{Synthesis: What the Measurements Imply} \label{se:measurement_synthesis}
+
+Three patterns in the data foreshadow the security analysis in
+Chapter~\ref{ch:security}:
+
+\begin{enumerate}
+\item \textbf{CTV is the cheapest lifecycle but the least flexible.}
+  At 368\vB{}, CTV's lifecycle cost is 33--35\% lower than CCV or OP\_VAULT.
+  But CTV cannot batch, cannot partially withdraw, and loses funds on address
+  reuse. The cost advantage comes from CTV's minimal script structure---the same
+  rigidity that creates its security vulnerabilities (fee pinning via anchors,
+  stuck funds on reuse).
+
+\item \textbf{OP\_VAULT's fee-input overhead is structural, not incidental.}
+  The 80--90\vB{} per non-deposit transaction reflects BIP-345's value preservation
+  rule, not an implementation choice. This overhead makes OP\_VAULT 36\% more
+  expensive than CCV per lifecycle---the economic basis for BIP-345's withdrawal
+  in favor of BIP-443.
+
+\item \textbf{Batching and revault create the per-UTXO recovery-cost scaling surface.}
+  CCV and OP\_VAULT's capability advantages (partial withdrawal, batched triggers)
+  are also the attack surface for per-UTXO recovery-cost scaling. The per-step revault cost
+  (111--121\vB{}) is cheap enough to chain thousands of splits, creating the
+  fee-dependent vulnerability analyzed in Section~\ref{se:watchtower_exhaustion}.
+  CTV and CAT+CSFS are immune precisely because they lack these capabilities.
+\end{enumerate}
+
+% ======================================================================
+\section{Case Study: Simplicity on Elements} \label{se:simplicity_measurements}
+
+The preceding sections present the four-way Bitcoin covenant comparison---the core
+contribution of this thesis. This section reports measurements from a fifth vault
+built with the Simplicity language on Elements regtest. Because Elements uses
+different transaction serialization (explicit fee outputs, confidential transaction
+fields, multi-asset model) and a federated consensus model, these measurements are
+\textbf{not directly comparable} with the Bitcoin results. We present them as a
+case study in what covenant enforcement looks like with full transaction introspection
+and no soft-fork dependency.
+
+\paragraph{Lifecycle costs.}
+The Simplicity vault lifecycle totals 865\vB{} (tovault 269, trigger 298, withdraw
+298, recover 286). This is 49--135\% larger than the Bitcoin designs, reflecting
+two factors: Elements serialization overhead (approximately 30--40~bytes per output
+for confidential transaction fields even in non-confidential mode) and Simplicity's
+bit-oriented DAG witness format (structurally different from Bitcoin Script's
+stack-based witnesses). A hypothetical Bitcoin-native Simplicity implementation
+would produce smaller transactions; the 865\vB{} figure includes both the language
+overhead and the chain overhead.
+
+\paragraph{Output-constrained recovery.}
+Unlike CAT+CSFS, the Simplicity vault enforces \texttt{jet::outputs\_hash()} on
+\emph{both} trigger and recovery paths. Cold key compromise can only recover funds
+to the pre-committed recovery address---matching CCV and OP\_VAULT's output-constrained
+model and providing stronger recovery safety than CAT+CSFS's unconstrained
+\texttt{OP\_CHECKSIG} (TM11, Section~\ref{se:cold_key_recovery}).
+
+\paragraph{Fee pinning immunity.}
+Elements uses explicit fee outputs (empty scriptPubKey) rather than Bitcoin's implicit
+fees. There are no anchor outputs to pin with descendant chains, eliminating the
+TM1 attack vector entirely. This immunity is a property of the Elements transaction
+format, not of Simplicity's covenant mechanism.

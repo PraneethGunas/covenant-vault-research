@@ -1,0 +1,147 @@
+% Appendix C: Per-experiment Measurements
+
+\section{Per-Experiment Measurements}
+\label{app:measurements}
+
+This appendix collects the regtest measurements underlying
+Section~\ref{sec:empirical} at greater granularity than the main
+body's summary tables permit. Each value is structurally
+deterministic (range~=~0 across repeated runs on the reference
+implementations: \texttt{simple-ctv-vault}, \texttt{pymatt},
+\texttt{opvault-demo}, our \texttt{cat-csfs-vault}, and our
+\texttt{simple-simplicity-vault}).
+
+\subsection{Revault Amplification}
+\label{app:meas:revault}
+
+Per-step vsize for nine successive partial withdrawals of
+$5{,}000{,}000$~sats each from an initial $49{,}999{,}900$-sat
+vault. Per-step size is constant across all nine steps for every
+design, confirming structural determinism.
+
+\begin{table}[h]
+\centering
+\caption{Per-step vsize for repeated partial unvaults with
+revault. \opccv{} and \opvault{} measure their native
+\texttt{trigger\_and\_revault}; \opctv{}, \catcsfs{}, and Simplicity do
+not support native revault---the figures listed show the
+single-withdrawal cost that repeats per step in a full-cycle
+emulation (unvault $\rightarrow$ withdraw $\rightarrow$
+re-deposit).}
+\label{tab:revault_appendix}
+\small
+\begin{tabular}{@{}lrrl@{}}
+\toprule
+Design   & Per-step vB & Cumulative @ 9 steps (vB) & Revault model \\
+\midrule
+\opccv{}       & 111 & 999    & Native partial unvault \\
+\opvault{} & 121 & 1{,}089 & Native partial unvault \\
+\opctv{}       & 152 & 1{,}368 & Full-cycle emulation \\
+\catcsfs{}  & 210 & 1{,}890 & Full-cycle emulation \\
+Simplicity & 386 & 3{,}474 & Full-cycle emulation (Elements serialisation) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Batching Sweep}
+\label{app:meas:batching}
+
+Total transaction vsize as a function of batch size $N$ for a
+single trigger aggregating $N$ vault UTXOs. \opccv{} and \opvault{}
+amortise fixed overhead across inputs (sub-linear scaling); \opctv{},
+\catcsfs{}, and Simplicity lack a spec-level batching primitive, so
+the natural cost is $N$ independent transactions and the totals
+grow strictly linearly.
+
+\begin{table}[h]
+\centering
+\caption{Batched trigger vsize measurements at batch sizes
+$N \in \{1, 2, 3, 5, 10, 20, 50\}$. Regression on the \opccv{} and
+\opvault{} rows yields $\text{vsize}_{\text{trigger}}(N) =
+\alpha_t + \beta_t \cdot N$ with
+$(\alpha_t, \beta_t)_{\mathrm{OP\_CCV}} \approx (53, 100)$\vB{} and
+$(\alpha_t, \beta_t)_{\opvault{}} \approx (198, 94)$\vB{}. The
+recovery-side linear fits used in
+Section~\ref{sec:empirical:batching} are
+$(\alpha, \beta)_{\mathrm{OP\_CCV}} = (54, 68)$\vB{} and
+$(\alpha, \beta)_{\opvault{}} = (154, 92)$\vB{}.}
+\label{tab:batching_appendix}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lrrrrrrr@{}}
+\toprule
+Design    & $N{=}1$ & $N{=}2$ & $N{=}3$ & $N{=}5$ & $N{=}10$ & $N{=}20$ & $N{=}50$ \\
+\midrule
+\opccv{}       & 154 & 254  & 355   & 555    & 1{,}056  & 2{,}059  & 5{,}066 \\
+\opvault{} & 292 & 385  & 479   & 667    & 1{,}135  & 2{,}073  & 4{,}885 \\
+\midrule
+\opctv{}       & 94  & 188  & 282   & 470    & 940      & 1{,}880  & 4{,}700 \\
+\catcsfs{}  & 221 & 442  & 663   & 1{,}105 & 2{,}210 & 4{,}420  & 11{,}050 \\
+Simplicity & 298 & 596 & 894   & 1{,}490 & 2{,}980 & 5{,}960  & 14{,}900 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Fee-Rate Sensitivity Projections}
+\label{app:meas:fees}
+
+Projected on-chain lifecycle cost
+$C_{\text{lifecycle}}(r) = \text{vsize}_{\text{total}} \times r$
+for each Bitcoin design at six historically observed fee rates.
+Fee-pinning cost is $r$-invariant. Watchtower-exhaustion
+feasibility is fee-dependent: the rightmost column gives the
+number of per-UTXO splits an attacker needs to drive a $0.5$~BTC
+\opccv{} vault below dust. The ranking of lifecycle totals is
+fee-invariant because vsize ratios are constant.
+
+\begin{table}[h]
+\centering
+\caption{Projected lifecycle cost (sats) across Bitcoin designs
+and the \opccv{} split-to-dust count, at $V = 0.5$~BTC. Simplicity
+runs on Elements and uses an incomparable fee mechanism (explicit
+fee outputs), so it is excluded from Bitcoin-fee projections.}
+\label{tab:fee_sensitivity_appendix}
+\footnotesize
+\begin{tabular}{@{}rrrrrrr@{}}
+\toprule
+& \multicolumn{4}{c}{Lifecycle cost (sats)} & Fee-pin & \opccv{} splits \\
+\cmidrule(lr){2-5}
+$r$ (\satvB{}) & \opctv{} & \opccv{} & \opvault{} & \catcsfs{} & (all $r$) & to dust \\
+\midrule
+1   &     368 &     565 &     567 &     553 & 14{,}300 & 409{,}836 \\
+10  &   3{,}680 &   5{,}650 &   5{,}670 &   5{,}530 & 14{,}300 &  40{,}984 \\
+50  &  18{,}400 &  28{,}250 &  28{,}350 &  27{,}650 & 14{,}300 &   8{,}197 \\
+100 &  36{,}800 &  56{,}500 &  56{,}700 &  55{,}300 & 14{,}300 &   4{,}098 \\
+300 & 110{,}400 & 169{,}500 & 170{,}100 & 165{,}900 & 14{,}300 &   1{,}366 \\
+500 & 184{,}000 & 282{,}500 & 283{,}500 & 276{,}500 & 14{,}300 &     820 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Address Reuse}
+\label{app:meas:reuse}
+
+A second deposit to the same \opctv{} vault address creates a UTXO
+whose amount does not match the committed template hash; the
+second UTXO is permanently unspendable via the vault path
+(confirmed on regtest). \opccv{}, \opvault{}, \catcsfs{}, and Simplicity
+all handle repeated deposits safely: \opccv{} and \opvault{} validate
+each UTXO per-instance against the contract; \catcsfs{} generates a
+unique vault plan per deposit (distinct P2TR addresses);
+Simplicity creates a fresh plan per instance. This is a
+design-level property of \opctv{}'s input-count-and-amount commitment,
+not an implementation artefact.
+
+\subsection{Measurements Not Captured}
+\label{app:meas:limits}
+
+Regtest mines blocks on demand and has no fee market, so temporal
+race dynamics (TM3 attacker-vs-watchtower timing, fee-pinning
+propagation delays) cannot be measured on the harness. Structural
+vsize is identical on regtest and mainnet for any fixed
+transaction structure, so the lifecycle, batching, and revault
+tables above transfer directly; the $r^\dagger$ thresholds of
+Section~\ref{sec:empirical:batching} are derived by projection,
+not timing.
+
+\providecommand{\todo}[2][]{\textbf{[TODO: #2]}}

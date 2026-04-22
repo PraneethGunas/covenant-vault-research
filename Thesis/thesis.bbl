@@ -1,0 +1,340 @@
+\begin{thebibliography}{51}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Abdalla et~al.(2026)Abdalla, Carmer, El~Gebali, et~al.]{PIPES26}
+Manuel Abdalla, Brandon Carmer, Mohsen El~Gebali, et~al.
+\newblock Bitcoin {PIPEs} v2.
+\newblock IACR ePrint 2026/186, 2026.
+\newblock URL \url{https://eprint.iacr.org/2026/186}.
+
+\bibitem[Almakhour et~al.(2020)Almakhour, Sliman, Samhat, and
+  Mellouk]{Almakhour20}
+Mouhamad Almakhour, Layth Sliman, Abed~Ellatif Samhat, and Abdelhamid Mellouk.
+\newblock Verification of smart contracts: A survey.
+\newblock \emph{Pervasive and Mobile Computing}, 67:\penalty0 101227, 2020.
+\newblock \doi{10.1016/j.pmcj.2020.101227}.
+
+\bibitem[Antonopoulos(2017)]{Antonopoulos17}
+Andreas~M. Antonopoulos.
+\newblock \emph{Mastering Bitcoin: Programming the Open Blockchain}.
+\newblock O'Reilly Media, 2nd edition, 2017.
+
+\bibitem[Atzei et~al.(2019)Atzei, Bartoletti, Lande, Yoshida, and
+  Zunino]{ABL19}
+Nicola Atzei, Massimo Bartoletti, Stefano Lande, Nobuko Yoshida, and Roberto
+  Zunino.
+\newblock Developing secure {Bitcoin} contracts with {BitML}.
+\newblock In \emph{ACM Joint European Software Engineering Conference and
+  Symposium on the Foundations of Software Engineering (ESEC/FSE)}, pages
+  1124--1128, 2019.
+\newblock \doi{10.1145/3338906.3341173}.
+
+\bibitem[Aumayr(2024)]{Aumayr24}
+Lukas Aumayr.
+\newblock \emph{Foundations of {Bitcoin}-Compatible Scalability Protocols}.
+\newblock PhD thesis, TU Wien, 2024.
+
+\bibitem[{B-SSL}(2025)]{BSSL25}
+{B-SSL}.
+\newblock Covenant-free vault model.
+\newblock Delving Bitcoin, 2025.
+
+\bibitem[Bartoletti and Zunino(2018)]{BZ18}
+Massimo Bartoletti and Roberto Zunino.
+\newblock {BitML}: A calculus for {Bitcoin} smart contracts.
+\newblock In \emph{ACM Conference on Computer and Communications Security
+  (CCS)}, pages 83--100, 2018.
+\newblock \doi{10.1145/3243734.3243795}.
+
+\bibitem[Bartoletti et~al.(2020)Bartoletti, Lande, and Zunino]{BLZ20}
+Massimo Bartoletti, Stefano Lande, and Roberto Zunino.
+\newblock Bitcoin covenants unchained.
+\newblock In \emph{International Conference on Information Security (ISC)},
+  pages 25--42, 2020.
+\newblock \doi{10.1007/978-3-030-61467-6_3}.
+
+\bibitem[Bartoletti et~al.(2022)Bartoletti, Lande, and Murgia]{BLM22}
+Massimo Bartoletti, Stefano Lande, and Maurizio Murgia.
+\newblock Verifying liquidity of recursive {Bitcoin} contracts.
+\newblock \emph{Logical Methods in Computer Science}, 18\penalty0 (1), 2022.
+
+\bibitem[{Bitcoin Core Developers}(2024)]{CoreRelay}
+{Bitcoin Core Developers}.
+\newblock Bitcoin core relay policy documentation.
+\newblock Bitcoin Core, 2024.
+\newblock URL \url{https://github.com/bitcoin/bitcoin/blob/master/doc/policy/}.
+\newblock Defines dust threshold, descendant limits, and RBF rules.
+
+\bibitem[{Bitcoin Developer Community}(2025)]{CTVCSFS25}
+{Bitcoin Developer Community}.
+\newblock {CTV+CSFS}: Can we reach consensus on a first step towards covenants?
+\newblock Delving Bitcoin, 2025.
+
+\bibitem[BtcDrak et~al.(2015)BtcDrak, Friedenbach, and Lombrozo]{BIP112}
+BtcDrak, Mark Friedenbach, and Eric Lombrozo.
+\newblock {BIP-112}: {CHECKSEQUENCEVERIFY}.
+\newblock Bitcoin Improvement Proposal, 2015.
+\newblock URL \url{https://bips.dev/112/}.
+
+\bibitem[Chakravarty et~al.(2020)Chakravarty, Chapman, MacKenzie, Melkonian,
+  Peyton~Jones, and Wadler]{EUTXO20}
+Manuel M.~T. Chakravarty, James Chapman, Kenneth MacKenzie, Orestis Melkonian,
+  Michael Peyton~Jones, and Philip Wadler.
+\newblock The extended {UTXO} model.
+\newblock In \emph{Financial Cryptography and Data Security (FC 2020
+  Workshops)}, pages 525--539, 2020.
+\newblock \doi{10.1007/978-3-030-54455-3_37}.
+
+\bibitem[{Covenants.info Contributors}(2024)]{covenants_info}
+{Covenants.info Contributors}.
+\newblock covenants.info --- community covenant comparison.
+\newblock \url{https://covenants.info}, 2024.
+
+\bibitem[dgpv(2024)]{dgpv24}
+dgpv.
+\newblock Analyzing simple vault covenant with {Alloy}.
+\newblock Delving Bitcoin, 2024.
+\newblock URL
+  \url{https://delvingbitcoin.org/t/analyzing-simple-vault-covenant-with-alloy/819}.
+
+\bibitem[Dilley et~al.(2016)Dilley, Poelstra, Wilkins, Piekarska, Gorlick, and
+  Friedenbach]{DPNS16}
+Johnny Dilley, Andrew Poelstra, Jonathan Wilkins, Marta Piekarska, Ben Gorlick,
+  and Mark Friedenbach.
+\newblock Strong federations: An interoperable blockchain protocol, 2016.
+
+\bibitem[Friedenbach et~al.(2015)Friedenbach, BtcDrak, Dorier, and
+  kinoshitajona]{BIP68}
+Mark Friedenbach, BtcDrak, Nicolas Dorier, and kinoshitajona.
+\newblock {BIP-68}: Relative lock-time using consensus-enforced sequence
+  numbers.
+\newblock Bitcoin Improvement Proposal, 2015.
+\newblock URL \url{https://bips.dev/68/}.
+
+\bibitem[Harding(2024)]{Har24}
+David~A. Harding.
+\newblock {OP\_VAULT} comments.
+\newblock Delving Bitcoin, 2024.
+\newblock URL \url{https://delvingbitcoin.org/t/op-vault-comments/521}.
+
+\bibitem[Ingala(2024)]{BIP443}
+Salvatore Ingala.
+\newblock {BIP-443}: {OP\_CHECKCONTRACTVERIFY}.
+\newblock Bitcoin Improvement Proposal, 2024.
+\newblock URL \url{https://bips.dev/443/}.
+
+\bibitem[Jackson(2012)]{Jackson12}
+Daniel Jackson.
+\newblock \emph{Software Abstractions: Logic, Language, and Analysis}.
+\newblock MIT Press, revised edition, 2012.
+
+\bibitem[Kirstein et~al.(2021)Kirstein, Grossman, Mirkin, Wilcox, and
+  Sagiv]{KLGZ21}
+Uri Kirstein, Shelly Grossman, Michael Mirkin, James Wilcox, and Mooly Sagiv.
+\newblock Phoenix: A formally verified regenerating vault.
+\newblock In \emph{arXiv preprint}, 2021.
+
+\bibitem[Leinweber et~al.(2019)Leinweber, Grundmann, Sch{\"o}nborn, and
+  Hartenstein]{LGSM19}
+Michael Leinweber, Matthias Grundmann, Ludwig Sch{\"o}nborn, and Hannes
+  Hartenstein.
+\newblock {TEE}-based distributed watchtowers for fraud protection in the
+  {Lightning Network}.
+\newblock In \emph{Data Privacy Management, Cryptocurrencies and Blockchain
+  Technology (DPM/CBT)}, pages 177--194, 2019.
+\newblock \doi{10.1007/978-3-030-31500-9_11}.
+
+\bibitem[Lombrozo et~al.(2015)Lombrozo, Lau, and Wuille]{BIP141}
+Eric Lombrozo, Johnson Lau, and Pieter Wuille.
+\newblock {BIP-141}: Segregated witness (consensus layer).
+\newblock Bitcoin Improvement Proposal, 2015.
+\newblock URL \url{https://bips.dev/141/}.
+
+\bibitem[Murray and Anisi(2019)]{Murray19}
+Yvonne Murray and David~A. Anisi.
+\newblock Survey of formal verification methods for smart contracts on
+  blockchain.
+\newblock IEEE International Conference on Software Quality, Reliability and
+  Security Companion (QRS-C), 2019.
+
+\bibitem[Möser et~al.(2016)Möser, Eyal, and Gün~Sirer]{MES16}
+Malte Möser, Ittay Eyal, and Emin Gün~Sirer.
+\newblock Bitcoin covenants.
+\newblock In \emph{Financial Cryptography and Data Security (FC 2016
+  Workshops)}, pages 126--141, 2016.
+\newblock \doi{10.1007/978-3-662-53357-4_9}.
+
+\bibitem[Nakamoto(2008)]{Nakamoto08}
+Satoshi Nakamoto.
+\newblock Bitcoin: A peer-to-peer electronic cash system, 2008.
+\newblock URL \url{https://bitcoin.org/bitcoin.pdf}.
+
+\bibitem[Naumenko and Riard(2021)]{NR21}
+Gleb Naumenko and Antoine Riard.
+\newblock Time-dilation attacks on the {Lightning Network}.
+\newblock \emph{Cryptoeconomic Systems}, 2021.
+\newblock URL
+  \url{https://cryptoeconomicsystems.pubpub.org/pub/riard-lightning-dilation}.
+
+\bibitem[Nick et~al.(2021)Nick, Ruffing, and Seurin]{NRS20}
+Jonas Nick, Tim Ruffing, and Yannick Seurin.
+\newblock {MuSig2}: Simple two-round {Schnorr} multi-signatures.
+\newblock In Tal Malkin and Chris Peikert, editors, \emph{Advances in
+  Cryptology -- {CRYPTO} 2021}, volume 12827 of \emph{Lecture Notes in Computer
+  Science}, pages 189--221. Springer International Publishing, 2021.
+\newblock \doi{10.1007/978-3-030-84252-9_7}.
+\newblock Contains the {BIP-340} Schnorr signature EUF-CMA security reduction
+  under the fixed-public-key model used by the CAT+CSFS dual-verification
+  argument in Ch.~2 and Ch.~5.
+
+\bibitem[O'Beirne(2023)]{OBeirne23}
+James O'Beirne.
+\newblock Vaults and covenants.
+\newblock Technical report, 2023.
+\newblock URL \url{https://jameso.be/vaults.pdf}.
+
+\bibitem[O'Beirne(2025)]{OB25}
+James O'Beirne.
+\newblock Withdrawing {OP\_VAULT} ({BIP-345}).
+\newblock Delving Bitcoin, 2025.
+
+\bibitem[O'Beirne and Sanders(2023)]{BIP345}
+James O'Beirne and Greg Sanders.
+\newblock {BIP-345}: {OP\_VAULT}.
+\newblock Bitcoin Improvement Proposal (withdrawn), 2023.
+\newblock URL \url{https://bips.dev/345/}.
+\newblock Withdrawn in favor of BIP-443.
+
+\bibitem[O'Connor(2017)]{OC17}
+Russell O'Connor.
+\newblock Simplicity: A new language for blockchains.
+\newblock In \emph{Proceedings of the ACM SIGPLAN Workshop on Programming
+  Languages and Analysis for Security (PLAS)}, 2017.
+\newblock \doi{10.1145/3139337.3139340}.
+
+\bibitem[O'Connor and Piekarska(2017)]{OP17}
+Russell O'Connor and Marta Piekarska.
+\newblock Enhancing {Bitcoin} transactions with covenants.
+\newblock In \emph{Financial Cryptography and Data Security (FC 2017
+  Workshops)}, pages 191--198, 2017.
+\newblock \doi{10.1007/978-3-319-70278-0_12}.
+
+\bibitem[Poelstra(2021)]{Poe21}
+Andrew Poelstra.
+\newblock {CAT} and {Schnorr} tricks {I} \& {II}.
+\newblock Blockstream Research Blog, 2021.
+\newblock URL
+  \url{https://medium.com/blockstream/cat-and-schnorr-tricks-i-faf1b59bd298}.
+
+\bibitem[Poinsot(2025)]{Poinsot25}
+Antoine Poinsot.
+\newblock Response to {CTV+CSFS} activation proposal.
+\newblock bitcoin-dev mailing list, 2025.
+\newblock Called for comprehensive exploration and proof before activation.
+
+\bibitem[Riard(2023)]{Ria23}
+Antoine Riard.
+\newblock Replacement cycling attacks on {Lightning Network}.
+\newblock bitcoin-dev mailing list, 2023.
+
+\bibitem[Rijndael(2024)]{Rij24}
+Rijndael.
+\newblock Basic vault prototype using {OP\_CAT}.
+\newblock Delving Bitcoin, 2024.
+\newblock URL
+  \url{https://delvingbitcoin.org/t/basic-vault-prototype-using-op-cat/576}.
+
+\bibitem[Rubin(2020)]{BIP119}
+Jeremy Rubin.
+\newblock {BIP-119}: {OP\_CHECKTEMPLATEVERIFY}.
+\newblock Bitcoin Improvement Proposal, 2020.
+\newblock URL \url{https://bips.dev/119/}.
+
+\bibitem[Ruffing and Poelstra(2024)]{BIP348}
+Tim Ruffing and Andrew Poelstra.
+\newblock {BIP-348}: {OP\_CHECKSIGFROMSTACK}.
+\newblock Bitcoin Improvement Proposal, 2024.
+\newblock URL \url{https://bips.dev/348/}.
+
+\bibitem[Singh et~al.(2020)Singh, Parizi, Zhang, Choo, and
+  Dehghantanha]{Singh20}
+Amritraj Singh, Reza~M. Parizi, Qi~Zhang, Kim-Kwang~Raymond Choo, and Ali
+  Dehghantanha.
+\newblock Blockchain smart contracts formalization: Approaches and challenges
+  to address vulnerabilities.
+\newblock \emph{Computers \& Security}, 88:\penalty0 101654, 2020.
+\newblock \doi{10.1016/j.cose.2019.101654}.
+
+\bibitem[Swambo(2022)]{Swa23}
+Jacob Swambo.
+\newblock \emph{Evolving Bitcoin Custody}.
+\newblock PhD thesis, University of Wyoming, 2022.
+
+\bibitem[Swambo et~al.(2020{\natexlab{a}})Swambo, Hommel, McElrath, and
+  Bishop]{SBMB20}
+Jacob Swambo, Spencer Hommel, Bob McElrath, and Bryan Bishop.
+\newblock Bitcoin covenants: Three ways to control the future,
+  2020{\natexlab{a}}.
+
+\bibitem[Swambo et~al.(2020{\natexlab{b}})Swambo, Hommel, McElrath, and
+  Bishop]{SHMB20}
+Jacob Swambo, Spencer Hommel, Bob McElrath, and Bryan Bishop.
+\newblock Custody protocols using bitcoin vaults.
+\newblock \emph{arXiv preprint}, 2020{\natexlab{b}}.
+
+\bibitem[Tolmach et~al.(2021)Tolmach, Li, Lin, Liu, and Li]{Tolmach21}
+Palina Tolmach, Yi~Li, Shang-Wei Lin, Yang Liu, and Zengxiang Li.
+\newblock A survey of smart contract formal specification and verification.
+\newblock \emph{ACM Computing Surveys}, 54\penalty0 (7):\penalty0 1--38, 2021.
+\newblock \doi{10.1145/3464421}.
+
+\bibitem[Towns(2025)]{Towns25}
+Anthony Towns.
+\newblock A summary of covenant proposals for {Bitcoin}.
+\newblock Delving Bitcoin, 2025.
+
+\bibitem[Wuille(2023)]{BIP347}
+Pieter Wuille.
+\newblock {BIP-347}: {OP\_CAT} for tapscript.
+\newblock Bitcoin Improvement Proposal, 2023.
+\newblock URL \url{https://bips.dev/347/}.
+
+\bibitem[Wuille and Daftuar(2024{\natexlab{a}})]{ClusterMempool}
+Pieter Wuille and Suhas Daftuar.
+\newblock Cluster mempool: A proposed redesign of bitcoin core's mempool.
+\newblock Delving Bitcoin, 2024{\natexlab{a}}.
+\newblock URL
+  \url{https://delvingbitcoin.org/t/an-overview-of-the-cluster-mempool-proposal/393}.
+\newblock Qualitatively changes the replacement cost calculus for fee-channel
+  pinning (class Z1); scope-limit in this work.
+
+\bibitem[Wuille and Daftuar(2024{\natexlab{b}})]{WD24}
+Pieter Wuille and Suhas Daftuar.
+\newblock Cluster mempool.
+\newblock Bitcoin Core, 2024{\natexlab{b}}.
+\newblock Replaces per-transaction ancestor/descendant limits.
+
+\bibitem[Wuille et~al.(2020{\natexlab{a}})Wuille, Nick, and Ruffing]{BIP340}
+Pieter Wuille, Jonas Nick, and Tim Ruffing.
+\newblock {BIP-340}: Schnorr signatures for secp256k1.
+\newblock Bitcoin Improvement Proposal, 2020{\natexlab{a}}.
+\newblock URL \url{https://bips.dev/340/}.
+
+\bibitem[Wuille et~al.(2020{\natexlab{b}})Wuille, Nick, and Towns]{BIP341}
+Pieter Wuille, Jonas Nick, and Anthony Towns.
+\newblock {BIP-341}: Taproot: {SegWit} version 1 spending rules.
+\newblock Bitcoin Improvement Proposal, 2020{\natexlab{b}}.
+\newblock URL \url{https://bips.dev/341/}.
+
+\bibitem[Wuille et~al.(2020{\natexlab{c}})Wuille, Nick, and Towns]{BIP342}
+Pieter Wuille, Jonas Nick, and Anthony Towns.
+\newblock {BIP-342}: Validation of taproot scripts.
+\newblock Bitcoin Improvement Proposal, 2020{\natexlab{c}}.
+\newblock URL \url{https://bips.dev/342/}.
+\newblock Defines Tapscript sighash computation used in CAT+CSFS introspection.
+
+\end{thebibliography}

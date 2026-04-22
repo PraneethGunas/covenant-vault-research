@@ -1,0 +1,117 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\citation{Nakamoto08}
+\citation{EUTXO20,Antonopoulos17}
+\citation{BIP141}
+\@writefile{toc}{\contentsline {chapter}{\numberline {2}Background}{7}{chapter.2}\protected@file@percent }
+\@writefile{lof}{\addvspace {10\p@ }}
+\@writefile{lot}{\addvspace {10\p@ }}
+\newlabel{ch:background}{{2}{7}{Background}{chapter.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {2.1}Bitcoin Script and Its Limitations}{7}{section.2.1}\protected@file@percent }
+\newlabel{se:script_limits}{{2.1}{7}{Bitcoin Script and Its Limitations}{section.2.1}{}}
+\citation{BIP68,BIP112}
+\@writefile{toc}{\contentsline {section}{\numberline {2.2}Transaction Introspection}{9}{section.2.2}\protected@file@percent }
+\newlabel{se:introspection}{{2.2}{9}{Transaction Introspection}{section.2.2}{}}
+\citation{MES16}
+\citation{Poe21}
+\@writefile{toc}{\contentsline {section}{\numberline {2.3}Covenants: Generic and Purpose-Built}{10}{section.2.3}\protected@file@percent }
+\newlabel{se:covenant_taxonomy}{{2.3}{10}{Covenants: Generic and Purpose-Built}{section.2.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3.1}Generic Covenants}{10}{subsection.2.3.1}\protected@file@percent }
+\newlabel{ss:generic}{{2.3.1}{10}{Generic Covenants}{subsection.2.3.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3.2}Purpose-Built Covenants}{11}{subsection.2.3.2}\protected@file@percent }
+\newlabel{ss:purpose_built}{{2.3.2}{11}{Purpose-Built Covenants}{subsection.2.3.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3.3}The Recursive Covenant Question}{11}{subsection.2.3.3}\protected@file@percent }
+\newlabel{ss:recursive}{{2.3.3}{11}{The Recursive Covenant Question}{subsection.2.3.3}{}}
+\citation{SHMB20}
+\@writefile{toc}{\contentsline {section}{\numberline {2.4}Vault Lifecycle and Threat Model}{12}{section.2.4}\protected@file@percent }
+\newlabel{se:vault_lifecycle}{{2.4}{12}{Vault Lifecycle and Threat Model}{section.2.4}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2.1}{\ignorespaces Vault lifecycle state machine. All covenant designs implement this four-state model. The trigger-to-withdrawal transition enforces a relative timelock (CSV) that creates the watchtower monitoring window. Recovery is available from both the Funded and Triggered states.}}{13}{figure.caption.10}\protected@file@percent }
+\newlabel{fig:vault_lifecycle}{{2.1}{13}{Vault lifecycle state machine. All covenant designs implement this four-state model. The trigger-to-withdrawal transition enforces a relative timelock (CSV) that creates the watchtower monitoring window. Recovery is available from both the Funded and Triggered states}{figure.caption.10}{}}
+\citation{SHMB20}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4.1}Threat Model Assumptions (Kerckhoffs)}{14}{subsection.2.4.1}\protected@file@percent }
+\newlabel{ss:kerckhoffs}{{2.4.1}{14}{Threat Model Assumptions (Kerckhoffs)}{subsection.2.4.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4.2}Threat Taxonomy}{14}{subsection.2.4.2}\protected@file@percent }
+\newlabel{ss:threat_taxonomy}{{2.4.2}{14}{Threat Taxonomy}{subsection.2.4.2}{}}
+\citation{BIP119}
+\@writefile{lot}{\contentsline {table}{\numberline {2.1}{\ignorespaces Threat taxonomy. Each row defines an adversary profile used in the security analysis (Chapter~\ref {ch:security}).}}{15}{table.caption.11}\protected@file@percent }
+\newlabel{tab:threat_summary}{{2.1}{15}{Threat taxonomy. Each row defines an adversary profile used in the security analysis (Chapter~\ref {ch:security})}{table.caption.11}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {2.5}OP\_CHECKTEMPLATEVERIFY (CTV)}{15}{section.2.5}\protected@file@percent }
+\newlabel{se:ctv}{{2.5}{15}{OP\_CHECKTEMPLATEVERIFY (CTV)}{section.2.5}{}}
+\citation{BIP443}
+\citation{BIP341,BIP342}
+\@writefile{lof}{\contentsline {figure}{\numberline {2.2}{\ignorespaces CTV vault mechanism. The vault UTXO is encumbered by a bare CTV hash $H$ that commits to the unvault transaction's entire output structure; any spend whose template hash differs from $H$ fails. The unvault UTXO is a P2WSH script with two Taproot leaves: a hot-key withdrawal gated by \texttt  {OP\_CSV}, and a CTV-committed cold sweep. A 3{,}300-sat anchor output enables CPFP fee bumping.}}{16}{figure.caption.12}\protected@file@percent }
+\newlabel{fig:ctv_mechanism}{{2.2}{16}{CTV vault mechanism. The vault UTXO is encumbered by a bare CTV hash $H$ that commits to the unvault transaction's entire output structure; any spend whose template hash differs from $H$ fails. The unvault UTXO is a P2WSH script with two Taproot leaves: a hot-key withdrawal gated by \texttt {OP\_CSV}, and a CTV-committed cold sweep. A 3{,}300-sat anchor output enables CPFP fee bumping}{figure.caption.12}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {2.6}OP\_CHECKCONTRACTVERIFY (CCV)}{16}{section.2.6}\protected@file@percent }
+\newlabel{se:ccv}{{2.6}{16}{OP\_CHECKCONTRACTVERIFY (CCV)}{section.2.6}{}}
+\citation{BIP345}
+\@writefile{toc}{\contentsline {section}{\numberline {2.7}OP\_VAULT (BIP-345)}{17}{section.2.7}\protected@file@percent }
+\newlabel{se:opvault}{{2.7}{17}{OP\_VAULT (BIP-345)}{section.2.7}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2.3}{\ignorespaces CCV vault mechanism. The vault UTXO is a Taproot with two leaves: a \emph  {trigger} leaf containing \texttt  {OP\_CCV}, and a keyless \emph  {recover} leaf. Spending the trigger leaf invokes the per-output \texttt  {OP\_CHECKCONTRACTVERIFY} check, whose mode byte selects whether to verify the scriptPubKey, the amount, both, or the current input. Taptree preservation enables recursion, supporting partial withdrawal via \texttt  {trigger\_and\_revault}. Spending the recover leaf is permissionless and sends funds to the pre-committed address without a signature.}}{18}{figure.caption.13}\protected@file@percent }
+\newlabel{fig:ccv_mechanism}{{2.3}{18}{CCV vault mechanism. The vault UTXO is a Taproot with two leaves: a \emph {trigger} leaf containing \texttt {OP\_CCV}, and a keyless \emph {recover} leaf. Spending the trigger leaf invokes the per-output \texttt {OP\_CHECKCONTRACTVERIFY} check, whose mode byte selects whether to verify the scriptPubKey, the amount, both, or the current input. Taptree preservation enables recursion, supporting partial withdrawal via \texttt {trigger\_and\_revault}. Spending the recover leaf is permissionless and sends funds to the pre-committed address without a signature}{figure.caption.13}{}}
+\citation{OB25}
+\citation{Poe21,BIP347,BIP348}
+\@writefile{toc}{\contentsline {section}{\numberline {2.8}CAT+CSFS (BIP-347 + BIP-348)}{19}{section.2.8}\protected@file@percent }
+\newlabel{se:catcsfs_bg}{{2.8}{19}{CAT+CSFS (BIP-347 + BIP-348)}{section.2.8}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2.4}{\ignorespaces OP\_VAULT mechanism. The opcode pair \texttt  {OP\_VAULT} and \texttt  {OP\_VAULT\_RECOVER} encodes vault-specific semantics (amount preservation, auto-revault, authorized recovery) directly. Three keys are separated: the \emph  {trigger key} initiates withdrawals, the \emph  {recoveryauth key} authorizes recovery, and the \emph  {recovery address} (embedded in the Taproot internal-key tweak) is the pre-committed destination. Value preservation requires a fee-wallet input on every trigger and recovery transaction (${\sim }80$--$90\,\text  {vB}{}$ overhead).}}{20}{figure.caption.14}\protected@file@percent }
+\newlabel{fig:opvault_mechanism}{{2.4}{20}{OP\_VAULT mechanism. The opcode pair \texttt {OP\_VAULT} and \texttt {OP\_VAULT\_RECOVER} encodes vault-specific semantics (amount preservation, auto-revault, authorized recovery) directly. Three keys are separated: the \emph {trigger key} initiates withdrawals, the \emph {recoveryauth key} authorizes recovery, and the \emph {recovery address} (embedded in the Taproot internal-key tweak) is the pre-committed destination. Value preservation requires a fee-wallet input on every trigger and recovery transaction (${\sim }80$--$90\vB {}$ overhead)}{figure.caption.14}{}}
+\citation{BIP342}
+\citation{OC17}
+\citation{DPNS16}
+\@writefile{lof}{\contentsline {figure}{\numberline {2.5}{\ignorespaces CAT+CSFS vault mechanism. The Taproot script has two leaves. \textbf  {Hot-key leaf (top):} the spender provides sighash preimage fields; \texttt  {OP\_CAT} concatenates them; \texttt  {OP\_CSFS} verifies the Schnorr signature against this stack-assembled preimage; \texttt  {OP\_CHECKSIG} verifies the \emph  {same} signature against the real transaction sighash. Both succeed only if the two preimages agree, binding outputs through \texttt  {hashOutputs}. \textbf  {Recovery leaf (bottom):} bare \texttt  {cold\_pk OP\_CHECKSIG}---no CAT, no CSFS, no output binding.}}{21}{figure.caption.15}\protected@file@percent }
+\newlabel{fig:catcsfs_mechanism}{{2.5}{21}{CAT+CSFS vault mechanism. The Taproot script has two leaves. \textbf {Hot-key leaf (top):} the spender provides sighash preimage fields; \texttt {OP\_CAT} concatenates them; \texttt {OP\_CSFS} verifies the Schnorr signature against this stack-assembled preimage; \texttt {OP\_CHECKSIG} verifies the \emph {same} signature against the real transaction sighash. Both succeed only if the two preimages agree, binding outputs through \texttt {hashOutputs}. \textbf {Recovery leaf (bottom):} bare \texttt {cold\_pk OP\_CHECKSIG}---no CAT, no CSFS, no output binding}{figure.caption.15}{}}
+\citation{BIP340}
+\@writefile{toc}{\contentsline {section}{\numberline {2.9}Simplicity on Elements: An Alternative Script Primitive}{22}{section.2.9}\protected@file@percent }
+\newlabel{se:simplicity_bg}{{2.9}{22}{Simplicity on Elements: An Alternative Script Primitive}{section.2.9}{}}
+\citation{SHMB20,Har24}
+\@writefile{lof}{\contentsline {figure}{\numberline {2.6}{\ignorespaces Simplicity vault mechanism on Elements. At compile time, the program (a DAG of combinators) embeds an expected outputs-hash~$H$ as a parameter. At spend time, \texttt  {jet::outputs\_hash()} computes the Merkle hash of the spending transaction's outputs. If the computed hash matches~$H$, the program accepts; otherwise the program fails at the consensus level. Both trigger and recovery leaves enforce this jet---unlike CAT+CSFS, where recovery is unconstrained.}}{23}{figure.caption.16}\protected@file@percent }
+\newlabel{fig:simplicity_mechanism}{{2.6}{23}{Simplicity vault mechanism on Elements. At compile time, the program (a DAG of combinators) embeds an expected outputs-hash~$H$ as a parameter. At spend time, \texttt {jet::outputs\_hash()} computes the Merkle hash of the spending transaction's outputs. If the computed hash matches~$H$, the program accepts; otherwise the program fails at the consensus level. Both trigger and recovery leaves enforce this jet---unlike CAT+CSFS, where recovery is unconstrained}{figure.caption.16}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {2.10}The Design-Space Axes}{23}{section.2.10}\protected@file@percent }
+\newlabel{se:design_space_axes}{{2.10}{23}{The Design-Space Axes}{section.2.10}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.10.1}Axis Definitions}{24}{subsection.2.10.1}\protected@file@percent }
+\newlabel{ss:axis_defs}{{2.10.1}{24}{Axis Definitions}{subsection.2.10.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.10.2}Four-Covenant Position Table}{25}{subsection.2.10.2}\protected@file@percent }
+\newlabel{ss:position_table}{{2.10.2}{25}{Four-Covenant Position Table}{subsection.2.10.2}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {2.2}{\ignorespaces The four Bitcoin covenant proposals, positioned on the seven axes of Section~\ref {ss:axis_defs}. Every attack-class susceptibility and immunity claim in Chapter~\ref {ch:security} is a lookup against this table; numerical thresholds are measured in Chapter~\ref {ch:results}.}}{26}{table.caption.17}\protected@file@percent }
+\newlabel{tab:design_space_position}{{2.2}{26}{The four Bitcoin covenant proposals, positioned on the seven axes of Section~\ref {ss:axis_defs}. Every attack-class susceptibility and immunity claim in Chapter~\ref {ch:security} is a lookup against this table; numerical thresholds are measured in Chapter~\ref {ch:results}}{table.caption.17}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.10.3}Structural Dependencies Between Axes}{26}{subsection.2.10.3}\protected@file@percent }
+\newlabel{ss:axis_deps}{{2.10.3}{26}{Structural Dependencies Between Axes}{subsection.2.10.3}{}}
+\@setckpt{chapters/ch2_background}{
+\setcounter{page}{28}
+\setcounter{equation}{0}
+\setcounter{enumi}{2}
+\setcounter{enumii}{0}
+\setcounter{enumiii}{0}
+\setcounter{enumiv}{0}
+\setcounter{footnote}{0}
+\setcounter{mpfootnote}{0}
+\setcounter{part}{0}
+\setcounter{chapter}{2}
+\setcounter{section}{10}
+\setcounter{subsection}{3}
+\setcounter{subsubsection}{0}
+\setcounter{paragraph}{0}
+\setcounter{subparagraph}{0}
+\setcounter{figure}{6}
+\setcounter{table}{2}
+\setcounter{parentequation}{0}
+\setcounter{NAT@ctr}{0}
+\setcounter{@pps}{0}
+\setcounter{@ppsavesec}{0}
+\setcounter{@ppsaveapp}{0}
+\setcounter{section@level}{2}
+\setcounter{Item}{17}
+\setcounter{Hfootnote}{0}
+\setcounter{Hy@AnnotLevel}{0}
+\setcounter{bookmark@seq@number}{32}
+\setcounter{lstnumber}{1}
+\setcounter{@todonotes@numberoftodonotes}{0}
+\setcounter{caption@flags}{2}
+\setcounter{continuedfloat}{0}
+\setcounter{subfigure}{0}
+\setcounter{subtable}{0}
+\setcounter{proposition}{0}
+\setcounter{r@tfl@t}{0}
+\setcounter{LT@tables}{0}
+\setcounter{LT@chunks}{0}
+\setcounter{lstlisting}{0}
+}

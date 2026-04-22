@@ -1,0 +1,119 @@
+% §1 Introduction — Target 1.5pp
+
+\section{Introduction}
+\label{sec:intro}
+
+Bitcoin's custody model places the entire burden of key security on the
+asset holder: a compromised private key results in irreversible fund loss
+with no protocol-level recourse. Covenant-based vaults address this by
+interposing a time-delayed spending path between key compromise and fund
+movement, so that an unauthorized hot-key spend can be intercepted by a
+watchtower during a configurable delay window and redirected to cold
+storage~\cite{SHMB20,MES16}. We focus on four Bitcoin Script
+extension proposals with published BIPs, reference implementations,
+and vault-specific threat discussion in the 2023--2026 activation
+debate: \opctv{}~\cite{BIP119}, \opccv{}~\cite{BIP443}, \opvault{}~\cite{BIP345}
+(withdrawn~\cite{OB25}, included for comparison), and the
+\opcat{}+\opcsfs{} composition~\cite{BIP347,BIP348}. Other
+covenant-capable proposals (ANYPREVOUT, TXHASH, TLUV) are beyond our
+scope. Practitioners must choose among the four, yet no peer-reviewed
+cross-design comparison exists.
+
+The four proposals differ in how they introspect the spending
+transaction, how they authorize recovery, and how they pay fees. These
+differences are not cosmetic: each choice opens a distinct
+vulnerability surface---anchor-based fee models admit descendant-chain
+pinning (class \classfee{}), partial-withdrawal recovery admits a
+per-UTXO recovery-cost tail whose ordering between \opccv{} and
+\opvault{} inverts with watchtower batching (class \classscale{}),
+keyless recovery admits permissionless griefing (class \classgrief{}),
+destination-substitutable withdrawal admits hot-key theft
+(class \classhot{}), and unbound recovery leaves admit
+cold-key theft (class \classcold{}). No single design minimises
+defender loss across all classes and all fee rates. The
+activation debate~\cite{CTVCSFS25,Poinsot25,Towns25,OB25} has proceeded
+without quantitative input on these tradeoffs; the literature contains
+only qualitative matrices~\cite{covenants_info} and a single
+back-of-envelope fee-pinning estimate~\cite{Har24} based on assumed
+rather than measured transaction sizes.
+
+This paper fills that gap. We build all four Bitcoin vault
+implementations behind a uniform lifecycle interface and run 15
+experiments on regtest measuring transaction sizes, attack costs,
+and per-design functional differences. We additionally develop Alloy
+bounded model checking specifications for structural properties (fund
+conservation, recovery liveness, no-extraction), and derive
+closed-form expressions for dust-threshold fee rates, pinning costs,
+and batching amortisation. We implement a fifth design---a Simplicity
+vault on Elements---as a cross-substrate reference point; because
+Elements uses federated rather than proof-of-work consensus, the
+Simplicity results are presented in Appendix~\ref{app:simplicity} and
+are excluded from the formal statements below. Simplicity serves as
+a constructive existence proof that the dominant corner of the
+Bitcoin design space is occupiable on some substrate, even
+while no Bitcoin proposal occupies it.
+
+\paragraph{Contributions.}
+\begin{enumerate}
+  \item A \textbf{structural design-space decomposition}: covenant
+    vault designs are characterised by seven canonical axes
+    (\axauth{}, \axrevault{}, \axfee{}, \axwdbind{}, \axrecbind{},
+    \axopsurf{}, \axintro{}; Section~\ref{sec:bg:axes}), with six
+    derived attack classes \classfee{}--\classmode{}. Each class
+    is a deterministic consequence of a specific axis-value
+    (Sections~\ref{sec:imposs:class_fee}--\ref{sec:imposs:class_mode}),
+    susceptibility and immunity both mechanical readings of the
+    position table. No proposed Bitcoin extension occupies
+    the dominant corner (Section~\ref{sec:imposs:design_space}).
+  \item A \textbf{Griefing--Safety Incompatibility} proposition: no
+    covenant vault simultaneously achieves permissionless recovery and
+    griefing resistance (Section~\ref{sec:imposs:class_grief}).
+  \item A \textbf{per-threat defender-loss characterisation}
+    $\mathcal{L}(\mathrm{TM}, D, V, r, b)$ parameterised by threat
+    model, design, vault value, fee rate, and defender batching
+    strategy (Section~\ref{sec:imposs:sensitivity}).
+  \item \textbf{Batched-defender measurements and a recovery-cost
+    ordering-flip finding.} When the watchtower recovers many
+    triggered vault UTXOs in one transaction instead of one at a
+    time, its per-input cost drops sharply, raising the fee rate
+    at which the per-UTXO recovery-cost tail of class \classscale{}
+    saturates within a single block by $1.8\times$ for \opccv{} and
+    $2.7\times$ for \opvault{}. The safer of the two designs under
+    \classscale{} therefore depends on whether the watchtower
+    batches: \opccv{} is safer without batching, \opvault{} is safer
+    with it (Section~\ref{sec:empirical:batching}).
+  \item \textbf{Axis-keyed deployment guidance} keyed to fee
+    regime, batching strategy, and adversary profile, derived as
+    counter-factual readings of the class rationality blocks
+    (Section~\ref{sec:deployment}).
+\end{enumerate}
+
+Contributions are derived from the design-space decomposition of
+Section~\ref{sec:bg:axes} and referenced uniformly throughout
+Sections~\ref{sec:impossibility}--\ref{sec:deployment}. Every
+attack-feasibility claim in this work is evaluated under the
+Kerckhoffs threat model of Section~\ref{sec:bg:lifecycle}.
+
+\paragraph{Scope.} Our formal results range over the four proposed
+Bitcoin Script extensions only. We implement and discuss
+Simplicity~\cite{OC17}, an alternative script primitive deployed on
+the Elements federated sidechain~\cite{DPNS16}, as a cross-substrate
+reference point (Appendix~\ref{app:simplicity}). Elements'
+functionary-federated consensus differs fundamentally from Bitcoin's
+proof-of-work, and the threats we analyse do not transfer identically
+across that substrate boundary. Protocol-layer constructs such as Ark
+and BitVM are also excluded: both operate above the opcode level and
+require modelling interactive rounds outside our single-transaction
+covenant framework.
+
+\paragraph{Roadmap.}
+Section~\ref{sec:background} summarises the four Script extensions,
+the vault lifecycle, and the 11-element threat taxonomy.
+Section~\ref{sec:impossibility} presents the structural results.
+Section~\ref{sec:empirical} reports the regtest measurements.
+Section~\ref{sec:deployment} derives deployment guidance from the
+per-threat analysis. Section~\ref{sec:related} positions this work
+against prior vault research and Section~\ref{sec:discussion}
+discusses limitations and open problems.
+
+\providecommand{\todo}[2][]{\textbf{[TODO: #2]}}

@@ -1,0 +1,389 @@
+\chapter{Rationality Block Template and Full Catalogue}
+\label{app:rationality}
+
+\section{Purpose}
+\label{app:rat:purpose}
+
+Chapter~\ref{ch:security} derives six attack classes, each with a
+\emph{Rationality and Scope} block structured per the seven-field
+schema of Section~\ref{se:rationality_conventions}. The FC 2027 paper
+compresses these blocks into a single matrix
+(\texttt{conference/FC-2027/paper/appendix-b-threat-matrix.tex},
+§B.2); for the thesis, the block form preserves the full reasoning
+chain for each class. A reviewer or deployment engineer can audit
+any field against their own environment; a claim that is valid under
+the thesis's conditions but not under some downstream reader's
+condition should be flagged by a mismatch in fields (3)--(5) rather
+than by reading between the lines.
+
+This appendix restates the six blocks in free-text form. The thesis
+chapters reference these blocks by subsection label (e.g.,
+\S\ref{app:rat:classfee} for class \classfee{}) rather than by
+embedding the prose inline.
+
+\section{Class \classfee{}: Fee-Channel Pinning}
+\label{app:rat:classfee}
+
+\paragraph{(1) Attacker capability.}
+The attacker holds the hot key of the target vault and capital
+sufficient for the anchor-descendant chain (approximately
+$14{,}300$~sats at the reference dust-relay rate of $3\satvB{}$).
+Mempool access is required --- specifically, the ability to broadcast
+transactions to a Bitcoin Core node that propagates under default
+policy. The attacker is assumed to know the vault's design and axis
+values (Kerckhoffs, Section~\ref{ss:kerckhoffs}).
+
+\paragraph{(2) Defender model.}
+An online watchtower that monitors the mempool and blockchain and
+attempts CPFP replacement on the unvaulting UTXO's anchor output when
+an unauthorised trigger is observed. The watchtower operates a
+default Bitcoin Core mempool with the $25$-descendant relay limit
+active. The attacker's descendant chain saturates this limit before
+the watchtower's CPFP transaction can be accepted; BIP-125 Rule 3
+then requires the replacement to pay for evicting every descendant,
+which is economically infeasible against a dust-rate chain.
+
+\paragraph{(3) Economic preconditions.}
+$\mathcal{L}(\mathrm{TM1})$ and the adversary advantage $\mathrm{Adv}$
+are both $r$-invariant: the attack cost $C_{\text{pin}} = 25(\rho+1)
+\cdot \text{vsize}_{\text{desc}} + \alpha_{\text{anchor}}$ is bounded
+in absolute terms (not as a function of vault value or fee rate).
+For any reference vault value $V \gg C_{\text{pin}}$, the attack is
+rational at every fee regime. We measured $C_{\text{pin}} \approx
+14{,}300$~sats against a $0.5$~BTC reference vault; that is $0.03\%$
+of the vault.
+
+\paragraph{(4) Protocol / network assumptions.}
+Bitcoin Core default mempool policy: $25$-descendant limit from
+BIP-125; $3\satvB{}$ dustRelay threshold (policy, not consensus);
+RBF Rule 3 requiring the replacement to pay both a higher fee rate
+and a higher absolute fee than the cumulative descendants it evicts.
+The anchor output sized at $3{,}300$~sats (CTV reference design) is
+spendable by any party, which lets the attacker pay its descendant
+chain without any key material beyond the hot key used for the
+trigger.
+
+\paragraph{(5) Scope of validity.}
+Applies iff the covenant's axis \axfee{} has value
+\texttt{out-of-band-anchor} --- i.e., fees attach via a CPFP anchor
+output rather than being deducted from vault value or supplied via a
+separate fee-wallet input. Does not apply to covenants with dynamic
+fee inclusion (CCV, OP\_VAULT, CAT+CSFS), whose trigger transactions
+do not carry a pinnable anchor handle: the attacker cannot pin a
+transaction whose very existence they are trying to delay.
+
+\paragraph{(6) Rational-attacker check.}
+Rational at any $r$ given hot-key compromise: payoff $\approx V$
+(full vault theft once the watchtower's recovery is blocked and
+the hot key completes withdrawal after CSV expiry), cost $\approx
+C_{\text{pin}}$, residual value risk to the attacker limited to the
+descendant-chain sats.
+
+\paragraph{(7) Counter-factual mitigations.}
+Three distinct counter-factuals eliminate or shrink the class:
+\begin{enumerate}
+\item \textbf{TRUC/BIP-431 (recommended).} The TRUC
+  (\texttt{version=3}) transaction type collapses the descendant
+  limit to $1$. A \opctv{} unvault that uses TRUC eliminates the
+  pinning surface at the relay-policy level; this is available in
+  Bitcoin Core v28.0+ and requires only that the unvault template
+  commit to the TRUC version.
+\item \textbf{Cluster mempool redesign.} The cluster-mempool
+  proposal (Wuille and Daftuar~\cite{ClusterMempool}) changes
+  replacement-cost accounting in ways that qualitatively alter the
+  pinning-cost calculus. Scope-limit rather than a within-scope
+  mitigation; treated as future work.
+\item \textbf{P2A-style smaller anchor.} Reducing the anchor output
+  from $3{,}300$~sats (BIP-118-style bare anchor) to the $330$~sat
+  P2A companion specified in BIP-431 reduces the absolute attack
+  cost but does not eliminate the structural surface.
+\end{enumerate}
+A vault-design recommendation derived from this block is:
+\emph{always deploy CTV unvault transactions as TRUC wherever Core
+v28.0+ is present on the network path}.
+
+\section{Class \classgrief{}: Permissionless Griefing}
+\label{app:rat:classgrief}
+
+\paragraph{(1) Attacker capability.}
+Zero keys for CCV (the class's only susceptible covenant). The
+attacker needs only mempool observation (to detect unauthorised
+triggers as they propagate) and the public recovery address.
+Kerckhoffs: we assume the recovery address is known, either because
+it was published for auditability, reused across vaults under the
+same cold key, or revealed by any prior legitimate recovery.
+
+\paragraph{(2) Defender model.}
+Any. The attack is pure liveness denial: the attacker does not
+extract funds, only forces the owner to re-deposit and re-trigger
+repeatedly. The owner's choice is to tolerate the cycle, abandon
+the vault, or rotate to a different covenant design. A watchtower
+does not help --- the attack triggers the watchtower's own recovery
+path, which is what the attacker wants.
+
+\paragraph{(3) Economic preconditions.}
+$\mathcal{L}$ scales linearly in fee rate $r$ (each round costs
+$\text{vsize}_{\text{def}} \cdot r$ plus the owner's re-trigger
+cost). The asymmetry $\gamma = \text{vsize}_{\text{atk}} /
+\text{vsize}_{\text{def}}$ is $r$-invariant.
+
+\paragraph{(4) Protocol / network assumptions.}
+Mempool-observable trigger transactions (standard under
+all Bitcoin Core releases). No RBF dependence: the attacker's
+recovery transaction does not contend with the trigger for the same
+UTXO spend, only with subsequent withdraw attempts.
+
+\paragraph{(5) Scope of validity.}
+Applies iff \axauth{} = \texttt{keyless}. Reduces to a
+key-compromise attack (TM6) under any key-gated recovery model;
+the key-gated variant has a much narrower attacker pool.
+
+\paragraph{(6) Rational-attacker check.}
+Irrational without external incentive: the attacker has no direct
+financial gain. Rational only when the external incentive (extortion
+payout, competitor disruption, state-actor operation) exceeds the
+round-by-round cost.
+
+\paragraph{(7) Counter-factual mitigations.}
+\axauth{} = \texttt{recoveryauth-key} (as in OP\_VAULT) eliminates
+the class by requiring a Schnorr signature on the recovery leaf;
+any key-gated recovery (cold key, hot key, or dedicated authorisation
+key) has the same effect. The design tradeoff is that key-gated
+recovery reintroduces key-loss risk --- Proposition~1 of
+Chapter~\ref{ch:security} formalises the incompatibility.
+
+\section{Class \classscale{}: Per-UTXO Recovery-Cost Scaling}
+\label{app:rat:classscale}
+
+\paragraph{(1) Attacker capability.}
+The trigger (hot) key of the target vault and capital for $N$
+partial-withdrawal trigger transactions. Kerckhoffs: the attacker
+knows the vault's axis values, specifically \axrevault{} =
+\texttt{yes}.
+
+\paragraph{(2) Defender model.}
+A watchtower with recovery authority (keyless for CCV,
+\texttt{recoveryauth} for OP\_VAULT). The defender-side degree of
+freedom is the batching flag $b \in \{0, 1\}$: single-input
+recovery ($b = 0$) scales linearly in UTXO count; batched recovery
+($b = 1$) has sub-linear amortisation. Defender policy also matters:
+a minimal-disruption policy (reactive per-UTXO recovery) maximises
+attacker leverage, while a full-sweep-on-first-alert policy
+collapses the class to one round at the cost of operational
+disruption.
+
+\paragraph{(3) Economic preconditions.}
+Rate-dependent; the single-block-feasibility threshold
+$r^\dagger_{\mathrm{TM4}}(V, D, b)$ from
+Equation~\ref{eq:r_star} is the governing parameter. Below
+$r^\dagger$ the defender absorbs the per-UTXO liability before dust
+economics kick in. Above $r^\dagger$ the attacker can drive every
+UTXO below the economic abandonment threshold within a single block
+window.
+
+\paragraph{(4) Protocol / network assumptions.}
+Bitcoin dust thresholds: $546$~sats P2WPKH, $330$~sats P2TR. RBF
+Rule 3 does not permit sibling-eviction, so the attacker's
+partial-withdrawal chain is single-chain (each partial unvault
+consumes the previous output). Minimum relay fee $\approx 1\satvB{}$
+bounds the attacker's per-tx cost from below. Mempool min-fee during
+congestion can float above the attacker's preferred rate; this is a
+scope modifier but not a sufficient mitigation.
+
+\paragraph{(5) Scope of validity.}
+Applies iff \axrevault{} = \texttt{yes}. The class is a
+\emph{structural cost tail of partial withdrawal}, independent of
+adversary behaviour; an attacker accelerates the distribution but
+is not required for the class to manifest. Legitimate operational
+partial withdrawal can produce the same distribution over time.
+Does not apply to CTV or CAT+CSFS (\axrevault{} = \texttt{no}).
+
+\paragraph{(6) Rational-attacker check.}
+Rational only above $r^\dagger$ and only with external incentive
+(competitor, extortion, state actor). A pure liveness attacker is
+irrational at any $r$ --- no financial gain. An attacker who holds
+the hot key \emph{and} drives the vault below $r^\dagger$ can extract
+value from UTXOs the watchtower abandons, assuming CSV expiry on
+those UTXOs.
+
+\paragraph{(7) Counter-factual mitigations.}
+Three distinct counter-factuals:
+\begin{enumerate}
+\item \textbf{Defender batching.} Raises $r^\dagger$ by
+  $1.8$--$2.7\times$ (Chapter~\ref{ch:results}). Materially absorbs
+  the tail under moderate congestion. Requires BIP-345
+  §``Batching'' or BIP-443 default aggregation support in the
+  watchtower implementation.
+\item \textbf{Full-sweep-on-first-alert.} Collapses the multi-round
+  loop to one round at the cost of forcing the owner to re-deposit.
+  Appropriate when the operational cost of a full sweep is less than
+  the expected loss from the cost tail.
+\item \textbf{Operational limits on per-epoch trigger count.} Not a
+  protocol-level mitigation, but a watchtower configuration that
+  triggers a full sweep after $k$ unauthorised triggers per unit
+  time limits the attacker's burst capacity.
+\end{enumerate}
+
+\paragraph{Reframing note.}
+Earlier framings of this class as ``watchtower exhaustion'' cast it
+as a multi-round attacker-vs-watchtower game. That framing does not
+survive a defender with full recovery authority who can full-sweep
+on first alert, collapsing the multi-round narrative to one round.
+The reframe above identifies the class as a structural cost tail of
+partial withdrawal --- attacker-accelerable but not
+attacker-required --- with the defender's degree of freedom in
+recovery batching.
+
+\section{Class \classhot{}: Hot-Key Theft via Destination Substitution}
+\label{app:rat:classhot}
+
+\paragraph{(1) Attacker capability.}
+The hot (trigger) key; mempool access; optional fee-pinning capital
+(if class \classfee{} composes, as it does for CTV).
+
+\paragraph{(2) Defender model.}
+An online watchtower able to race the attacker's unvault-to-withdraw
+sequence during the CSV delay. The race bias tilts toward the
+attacker when class \classfee{} composes (CTV with compromised fee
+key); otherwise the defender wins the race generically by
+broadcasting the recovery transaction with higher fees.
+
+\paragraph{(3) Economic preconditions.}
+Race outcome is $r$-independent except via class \classfee{}
+composition, which forces the watchtower's CPFP recovery to fail
+regardless of fee rate.
+
+\paragraph{(4) Protocol / network assumptions.}
+CSV delay length; mempool propagation dynamics. Riard's replacement
+cycling attack~\cite{Ria23} is adjacent but out of scope here; it
+would compose with class \classhot{} in the same way that class
+\classfee{} composes, but is a mempool-layer rather than a
+script-layer mitigation target.
+
+\paragraph{(5) Scope of validity.}
+Applies iff \axwdbind{} is one of
+\{\texttt{template-hash-digest}, \texttt{per-output-amount+script},
+\texttt{dedicated-opcode}\} --- i.e., any value other than
+\texttt{signature-dual-bind}. CAT+CSFS, uniquely, has \axwdbind{} =
+\texttt{signature-dual-bind} and is immune by construction.
+
+\paragraph{(6) Rational-attacker check.}
+Rational only paired with fee-pinning budget (composition with
+class \classfee{}) or against a defender with ineffective watchtower
+response. Otherwise the defender wins the race generically and the
+attack yields griefing only (which is irrational without external
+incentive per class \classgrief{}).
+
+\paragraph{(7) Counter-factual mitigations.}
+\axwdbind{} = \texttt{signature-dual-bind} eliminates the class by
+cryptographic construction. The CAT+CSFS dual-verification pattern
+forces the assembled sighash preimage to equal the consensus sighash
+preimage under Schnorr EUF-CMA security~\cite{NRS20}: a valid
+signature over two distinct messages under the same key would reduce
+to discrete-log. The \texttt{hashOutputs} field is a component of
+both preimages, so the output set is forced. A hot-key holder
+attempting to redirect the withdrawal produces a rejected
+transaction, not a theft; the outcome degrades to griefing-only.
+
+\section{Class \classcold{}: Cold-Key Theft via Unconstrained Recovery}
+\label{app:rat:classcold}
+
+\paragraph{(1) Attacker capability.}
+The cold (recovery) key. Kerckhoffs: we assume compromise, not
+inference --- the attack does not derive the cold key from observable
+data.
+
+\paragraph{(2) Defender model.}
+Any; the attack is instant with no CSV window and no watchtower
+intervention window. The cold-key-signed recovery transaction is
+valid the moment it is broadcast and there is no script-level check
+that would reject an attacker-chosen destination.
+
+\paragraph{(3) Economic preconditions.}
+$r$-invariant.
+
+\paragraph{(4) Protocol / network assumptions.}
+N/A --- pure signature check; no mempool dynamics. The attack
+completes in one transaction with no race window.
+
+\paragraph{(5) Scope of validity.}
+Applies iff \axrecbind{} = \texttt{plain-signature}. The only
+covenant with this axis value is CAT+CSFS, whose recovery leaf is a
+bare \texttt{cold\_pk OP\_CHECKSIG} with \sighash{DEFAULT} and no
+script-level output constraint.
+
+\paragraph{(6) Rational-attacker check.}
+Rational whenever cold key is compromised; yield $V$ (full vault
+theft), cost negligible.
+
+\paragraph{(7) Counter-factual mitigations.}
+\axrecbind{} = \texttt{signature-dual-bind} on the recovery leaf
+eliminates the class. Poelstra's sketch~\cite{Poe21} describes a
+CAT+CSFS-based bound-recovery construction that would move CAT+CSFS
+to this axis value; it is not in the reference CAT+CSFS vault
+implementation that this thesis measures. Alternative \axrecbind{}
+values (\texttt{template-hash-digest} as in CTV,
+\texttt{per-output-amount+script} as in CCV,
+\texttt{dedicated-opcode} as in OP\_VAULT) also produce immunity.
+The class-\classcold{} surface of CAT+CSFS is therefore the
+\emph{one structural cost} of its class-\classhot{} immunity, and
+it is addressable without moving off CAT+CSFS.
+
+\section{Class \classmode{}: Mode/Parameter Bypass}
+\label{app:rat:classmode}
+
+\paragraph{(1) Attacker capability.}
+Any observer of a vault whose script contains an undefined mode
+byte; no keys required.
+
+\paragraph{(2) Defender model.}
+Developer discipline around mode-byte selection; library-provided
+named constants (e.g., pymatt's \texttt{CCV\_FLAG\_*}); code review.
+
+\paragraph{(3) Economic preconditions.}
+None applicable --- full vault bypass at constant $110\vB{}$/spend
+(measured). The class is insensitive to vault value and fee rate.
+
+\paragraph{(4) Protocol / network assumptions.}
+BIP-341 and BIP-342 taproot \texttt{OP\_SUCCESSx} semantics: an
+undefined opcode value in tapscript terminates execution with
+success regardless of stack state. This is the forward-compatibility
+mechanism that permits future soft-forks to assign meaning to
+currently-undefined bytes without invalidating existing transactions.
+
+\paragraph{(5) Scope of validity.}
+Applies iff \axopsurf{} = \texttt{multi-mode-with-OP\_SUCCESS}. The
+only covenant with this axis value is CCV (BIP-443). CTV, OP\_VAULT,
+and CAT+CSFS all have \axopsurf{} = \texttt{single-mode} and expose
+a single semantic opcode with no mode selector.
+
+\paragraph{(6) Rational-attacker check.}
+Rational whenever a misconfigured vault exists on-chain. The
+attacker's payoff is $V$ (full vault theft), the cost is a single
+spend of $110\vB{} \times r$. The class is a developer-error surface,
+not a cryptographic vulnerability.
+
+\paragraph{(7) Counter-factual mitigations.}
+Three distinct counter-factuals:
+\begin{enumerate}
+\item \axopsurf{} = \texttt{single-mode}. One opcode per primitive
+  (as in the other three proposals) eliminates the class by
+  construction.
+\item Bitmask-gated mode check at script-parse time. Reject
+  undefined modes before execution; eliminates the class without
+  revising soft-fork semantics, but forfeits the forward-compatibility
+  benefit.
+\item Library-provided named constants. Makes the undefined-mode
+  surface unreachable from application code; residual risk in
+  independent implementations that hand-write the mode byte. This is
+  the pymatt approach and is the recommended mitigation for CCV
+  deployments.
+\end{enumerate}
+
+\paragraph{Framing note.}
+The class is \emph{specified behaviour} under BIP-443's
+forward-compatibility design (inherited from BIP-341/BIP-342), not a
+newly-discovered vulnerability. The thesis contribution here is the
+systematic mode sweep and the class-level framing that ties the
+surface to axis \axopsurf{}, not the discovery of
+\texttt{OP\_SUCCESSx} semantics.

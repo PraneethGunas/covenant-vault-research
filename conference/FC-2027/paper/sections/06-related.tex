@@ -1,0 +1,90 @@
+% §6 Related Work
+
+\section{Related Work}
+\label{sec:related}
+
+\paragraph{Vault custody protocols.}
+Swambo et al.~\cite{SHMB20} formalised the vault lifecycle---deposit,
+unvault, withdraw, recover---and the watchtower monitoring assumption
+that underpins all covenant vault designs, establishing the threat
+vocabulary we adopt and extend to the 11-element taxonomy. Their
+companion work~\cite{SBMB20} characterised three implementation
+approaches (deleted-key pre-signed transactions, COSHV, \opctv{}) but
+did not compare opcode-level designs empirically. Swambo's doctoral
+thesis~\cite{Swa23} extended this to the Ajolote autonomous custody
+system but did not include \opctv{}, \opccv{}, \opvault{}, or
+\catcsfs{}. Swambo and Poinsot's risk framework for the Revault
+protocol~\cite{SP21} developed an operational risk taxonomy for
+pre-signed-transaction vaults; our per-threat analysis is in a
+similar spirit but targets opcode-level covenants rather than
+deleted-key designs. Möser, Eyal, and Gün Sirer~\cite{MES16}
+introduced covenants as a vault-custody mechanism, predating all
+four BIPs. O'Beirne's technical report on vaults~\cite{OBeirne23}
+informed the design of BIP-345, which was subsequently
+withdrawn~\cite{OB25}. Kirstein et al.~\cite{KLGZ21} formally
+verified a single regenerating vault design in Dafny; our work
+differs in comparing five designs under a uniform methodology
+rather than deeply verifying one.
+
+\paragraph{Covenant proposals and analysis.}
+Each covenant proposal has its own design documentation and
+community analysis~\cite{BIP119,BIP443,BIP345,BIP347,BIP348}, but no
+peer-reviewed work compares them empirically. Harding~\cite{Har24}
+published a back-of-envelope estimate of \opvault{} single-block
+recovery-cost saturation (historically framed as ``watchtower
+exhaustion'') at ${\sim}3{,}000$ splits per block based on
+assumed---not measured---transaction sizes; we confirm $3{,}427$ for
+\opvault{} and measure $6{,}172$ for \opccv{}, revealing \opccv{}'s
+roughly $2\times$ worse unbatched exposure. Poelstra~\cite{Poe21}
+demonstrated \opcat{}-based introspection with dynamic destination
+and recursive covenants; our \catcsfs{} vault implements a
+simplified variant (fixed destination, no recursion) that isolates
+the dual-verification security properties. Rijndael~\cite{Rij24}
+built a Schnorr-G-trick vault without \opcsfs{}, demonstrating that
+\opcat{} alone enables covenant enforcement.
+
+\paragraph{Formal models of Bitcoin contracts.}
+The Bitcoin smart-contract formalisation lineage---Atzei et al.'s
+formal transaction model~\cite{ABLZ18}, BitML and its
+extensions~\cite{BZ18,ABL19,BLM22}, BitML's covenant
+extension~\cite{BLZ20}, and the Ethereum-side SoK
+methodology~\cite{ABC17}---provides the process-algebraic substrate
+against which our Alloy state-machine models stand as a
+complementary abstraction level, operating over the $(f, a, g, b)$
+design tuple. dgpv~\cite{dgpv24} applied Alloy to Rijndael's
+\opcat{} vault; we extend that methodology to all four BIP-specified
+designs plus Simplicity under a shared base model, adding a
+threat-model layer and a cross-covenant module.
+O'Connor~\cite{OC17} provided Coq-verified denotational semantics
+for Simplicity; our Simplicity model operates at the state-machine
+level, complementing that work with application-level verification.
+
+\paragraph{Layer-two security and rational adversaries.}
+Gudgeon et al.'s SoK~\cite{GMRMG20} systematises layer-two
+protocols; watchtower-based delegated monitoring has been
+formalised in TEE~\cite{LGSM19}, on-chain
+arbitration~\cite{McCorry19}, and UC-style state-channel
+constructions~\cite{DFH18,DEFM19,ABEFHMM21,Aumayr24}. Our class \classscale{}
+analysis shares the always-online monitoring assumption but reframes
+the question from ``how does an attacker exhaust the watchtower?''
+to ``what is the structural per-UTXO recovery-cost tail of partial
+withdrawal, and how does defender batching interact with it?'' On the
+rational-adversary side, miner-bribery analyses against timelocked
+Bitcoin primitives~\cite{TYME21,WSZN23,NKW21} formalise the
+adversary class that covenant vaults defend against during the
+unvault delay. Riard~\cite{Ria23} demonstrated replacement cycling
+against Lightning HTLCs, a mempool-manipulation class that may
+apply to covenant recovery transactions and is out of scope here.
+
+\paragraph{Positioning.}
+The qualitative covenants.info matrix~\cite{covenants_info}
+compares proposals across feature dimensions without transaction
+sizes, attack costs, or fee analysis. No prior work combines
+empirical measurement, formal verification, and
+fee-environment-dependent security analysis across multiple
+covenant vault designs. Our contribution is the integration of
+these three threads under a uniform adapter-based methodology
+that enables both Proposition~\ref{thm:griefing_safety} and the
+design-space framework of Section~\ref{sec:imposs:design_space}.
+
+\providecommand{\todo}[2][]{\textbf{[TODO: #2]}}

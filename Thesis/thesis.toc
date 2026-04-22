@@ -1,0 +1,216 @@
+\contentsline {chapter}{List of Figures}{xiii}{chapter*.4}%
+\contentsline {chapter}{List of Tables}{xvii}{chapter*.5}%
+\contentsline {chapter}{List of Abbreviations}{xx}{chapter*.6}%
+\contentsline {chapter}{\numberline {1}Introduction}{1}{chapter.1}%
+\contentsline {section}{\numberline {1.1}Main Results}{2}{section.1.1}%
+\contentsline {paragraph}{Griefing--safety impossibility.}{2}{section*.7}%
+\contentsline {paragraph}{Per-threat worst-case characterization.}{3}{section*.8}%
+\contentsline {section}{\numberline {1.2}Contributions}{3}{section.1.2}%
+\contentsline {section}{\numberline {1.3}Scope and Limitations}{5}{section.1.3}%
+\contentsline {section}{\numberline {1.4}Thesis Organization}{6}{section.1.4}%
+\contentsline {chapter}{\numberline {2}Background}{7}{chapter.2}%
+\contentsline {section}{\numberline {2.1}Bitcoin Script and Its Limitations}{7}{section.2.1}%
+\contentsline {section}{\numberline {2.2}Transaction Introspection}{9}{section.2.2}%
+\contentsline {section}{\numberline {2.3}Covenants: Generic and Purpose-Built}{10}{section.2.3}%
+\contentsline {subsection}{\numberline {2.3.1}Generic Covenants}{10}{subsection.2.3.1}%
+\contentsline {subsection}{\numberline {2.3.2}Purpose-Built Covenants}{11}{subsection.2.3.2}%
+\contentsline {subsection}{\numberline {2.3.3}The Recursive Covenant Question}{11}{subsection.2.3.3}%
+\contentsline {section}{\numberline {2.4}Vault Lifecycle and Threat Model}{12}{section.2.4}%
+\contentsline {subsection}{\numberline {2.4.1}Threat Model Assumptions (Kerckhoffs)}{14}{subsection.2.4.1}%
+\contentsline {subsection}{\numberline {2.4.2}Threat Taxonomy}{14}{subsection.2.4.2}%
+\contentsline {section}{\numberline {2.5}OP\_CHECKTEMPLATEVERIFY (CTV)}{15}{section.2.5}%
+\contentsline {section}{\numberline {2.6}OP\_CHECKCONTRACTVERIFY (CCV)}{16}{section.2.6}%
+\contentsline {section}{\numberline {2.7}OP\_VAULT (BIP-345)}{17}{section.2.7}%
+\contentsline {section}{\numberline {2.8}CAT+CSFS (BIP-347 + BIP-348)}{19}{section.2.8}%
+\contentsline {section}{\numberline {2.9}Simplicity on Elements: An Alternative Script Primitive}{22}{section.2.9}%
+\contentsline {section}{\numberline {2.10}The Design-Space Axes}{23}{section.2.10}%
+\contentsline {subsection}{\numberline {2.10.1}Axis Definitions}{24}{subsection.2.10.1}%
+\contentsline {subsection}{\numberline {2.10.2}Four-Covenant Position Table}{25}{subsection.2.10.2}%
+\contentsline {subsection}{\numberline {2.10.3}Structural Dependencies Between Axes}{26}{subsection.2.10.3}%
+\contentsline {chapter}{\numberline {3}Measurement Methodology}{28}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Framework Architecture}{28}{section.3.1}%
+\contentsline {subsection}{\numberline {3.1.1}Adapter Interface}{29}{subsection.3.1.1}%
+\contentsline {subsection}{\numberline {3.1.2}Capability-Based Dispatch}{30}{subsection.3.1.2}%
+\contentsline {subsection}{\numberline {3.1.3}Implementation Provenance}{30}{subsection.3.1.3}%
+\contentsline {section}{\numberline {3.2}Primary Metric: Virtual Size}{31}{section.3.2}%
+\contentsline {subsection}{\numberline {3.2.1}Fee Projection Model}{32}{subsection.3.2.1}%
+\contentsline {section}{\numberline {3.3}Rationality and Scope Conventions}{33}{section.3.3}%
+\contentsline {section}{\numberline {3.4}Regtest Validity}{34}{section.3.4}%
+\contentsline {paragraph}{No mempool competition.}{34}{section*.20}%
+\contentsline {paragraph}{No relay policy pressure.}{34}{section*.21}%
+\contentsline {paragraph}{No fee market.}{35}{section*.22}%
+\contentsline {paragraph}{Mining is instant.}{35}{section*.23}%
+\contentsline {section}{\numberline {3.5}Experiment Catalog}{35}{section.3.5}%
+\contentsline {section}{\numberline {3.6}Node Infrastructure}{37}{section.3.6}%
+\contentsline {chapter}{\numberline {4}Empirical Results}{38}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Lifecycle Cost Measurements}{38}{section.4.1}%
+\contentsline {section}{\numberline {4.2}OP\_VAULT Vsize Correction}{39}{section.4.2}%
+\contentsline {section}{\numberline {4.3}Batching Efficiency}{40}{section.4.3}%
+\contentsline {section}{\numberline {4.4}Revault Amplification}{42}{section.4.4}%
+\contentsline {section}{\numberline {4.5}Address Reuse}{43}{section.4.5}%
+\contentsline {section}{\numberline {4.6}Fee Sensitivity Projections}{43}{section.4.6}%
+\contentsline {section}{\numberline {4.7}Synthesis: What the Measurements Imply}{45}{section.4.7}%
+\contentsline {section}{\numberline {4.8}Case Study: Simplicity on Elements}{45}{section.4.8}%
+\contentsline {paragraph}{Lifecycle costs.}{46}{section*.32}%
+\contentsline {paragraph}{Output-constrained recovery.}{46}{section*.33}%
+\contentsline {paragraph}{Fee pinning immunity.}{46}{section*.34}%
+\contentsline {chapter}{\numberline {5}Security Analysis}{47}{chapter.5}%
+\contentsline {section}{\numberline {5.1}Griefing--Safety Impossibility}{47}{section.5.1}%
+\contentsline {section}{\numberline {5.2}Adversary Advantage and Structural Analysis}{49}{section.5.2}%
+\contentsline {subsection}{\numberline {5.2.1}Framework}{50}{subsection.5.2.1}%
+\contentsline {subsection}{\numberline {5.2.2}Design-Space Decomposition}{51}{subsection.5.2.2}%
+\contentsline {subsection}{\numberline {5.2.3}Feature--Vulnerability Implications}{52}{subsection.5.2.3}%
+\contentsline {paragraph}{Protocol level vs.\ user parameters.}{52}{section*.36}%
+\contentsline {subsection}{\numberline {5.2.4}Structural Consequence}{54}{subsection.5.2.4}%
+\contentsline {subsection}{\numberline {5.2.5}Relationship to Proposition~\ref {thm:griefing_safety}}{55}{subsection.5.2.5}%
+\contentsline {subsection}{\numberline {5.2.6}Fee-Rate Sensitivity of TM4}{55}{subsection.5.2.6}%
+\contentsline {paragraph}{Dust-threshold fee rate.}{57}{section*.38}%
+\contentsline {paragraph}{Scope of the threshold analysis.}{57}{section*.39}%
+\contentsline {paragraph}{Sensitivity to vault value.}{57}{section*.40}%
+\contentsline {paragraph}{Defender-budget interpretation.}{58}{section*.41}%
+\contentsline {section}{\numberline {5.3}Class Z1{}: Fee-Channel Pinning (TM1)}{59}{section.5.3}%
+\contentsline {paragraph}{Timing assumption.}{61}{section*.45}%
+\contentsline {section}{\numberline {5.4}Class Z3{}: Per-UTXO Recovery-Cost Scaling (TM4)}{62}{section.5.4}%
+\contentsline {subsection}{\numberline {5.4.1}Batched Defender Strategy}{63}{subsection.5.4.1}%
+\contentsline {paragraph}{Batching flips the TM4 ordering.}{64}{section*.48}%
+\contentsline {paragraph}{Constraints on batched recovery.}{65}{section*.49}%
+\contentsline {section}{\numberline {5.5}Class Z2{}: Permissionless Griefing (TM2)}{65}{section.5.5}%
+\contentsline {section}{\numberline {5.6}Class Z4{}: Hot-Key Theft via Destination Substitution (TM3)}{66}{section.5.6}%
+\contentsline {paragraph}{CTV.}{67}{section*.53}%
+\contentsline {paragraph}{CCV.}{67}{section*.54}%
+\contentsline {paragraph}{OP\_VAULT.}{67}{section*.55}%
+\contentsline {paragraph}{CAT+CSFS.}{67}{section*.56}%
+\contentsline {section}{\numberline {5.7}Class Z5{}: Cold-Key Theft via Unconstrained Recovery (TM11)}{68}{section.5.7}%
+\contentsline {paragraph}{CAT+CSFS.}{68}{section*.58}%
+\contentsline {paragraph}{CTV.}{69}{section*.59}%
+\contentsline {paragraph}{OP\_VAULT.}{69}{section*.60}%
+\contentsline {paragraph}{CCV.}{70}{section*.61}%
+\contentsline {paragraph}{Simplicity.}{70}{section*.62}%
+\contentsline {section}{\numberline {5.8}Projection onto the $(g, b)$ Sublattice}{70}{section.5.8}%
+\contentsline {section}{\numberline {5.9}Threat Model Matrix}{72}{section.5.9}%
+\contentsline {section}{\numberline {5.10}Deployment Guidance}{72}{section.5.10}%
+\contentsline {section}{\numberline {5.11}Class Z6{}: Mode/Parameter Bypass (TM8)}{74}{section.5.11}%
+\contentsline {subsection}{\numberline {5.11.1}Susceptibility}{75}{subsection.5.11.1}%
+\contentsline {subsection}{\numberline {5.11.2}Immunity Derivations}{75}{subsection.5.11.2}%
+\contentsline {subsection}{\numberline {5.11.3}Framing: Specified Behaviour, Not a Novel Vulnerability}{75}{subsection.5.11.3}%
+\contentsline {subsection}{\numberline {5.11.4}Rationality and Scope}{76}{subsection.5.11.4}%
+\contentsline {section}{\numberline {5.12}Rationality Blocks for Classes Z1--Z5}{77}{section.5.12}%
+\contentsline {subsection}{\numberline {5.12.1}Class Z1{} (Fee-Channel Pinning)}{77}{subsection.5.12.1}%
+\contentsline {subsection}{\numberline {5.12.2}Class Z2{} (Permissionless Griefing)}{78}{subsection.5.12.2}%
+\contentsline {subsection}{\numberline {5.12.3}Class Z3{} (Per-UTXO Recovery-Cost Scaling)}{78}{subsection.5.12.3}%
+\contentsline {paragraph}{Reframing note.}{79}{section*.65}%
+\contentsline {subsection}{\numberline {5.12.4}Class Z4{} (Hot-Key Theft via Destination Substitution)}{79}{subsection.5.12.4}%
+\contentsline {subsection}{\numberline {5.12.5}Class Z5{} (Cold-Key Theft via Unconstrained Recovery)}{80}{subsection.5.12.5}%
+\contentsline {chapter}{\numberline {6}Formal Verification}{82}{chapter.6}%
+\contentsline {section}{\numberline {6.1}Alloy and Bounded Model Checking}{82}{section.6.1}%
+\contentsline {section}{\numberline {6.2}Properties and Results}{83}{section.6.2}%
+\contentsline {paragraph}{Fund conservation.}{83}{section*.66}%
+\contentsline {paragraph}{No-extraction.}{83}{section*.67}%
+\contentsline {paragraph}{Recovery liveness.}{84}{section*.68}%
+\contentsline {paragraph}{Summary of results.}{84}{section*.69}%
+\contentsline {section}{\numberline {6.3}Three-Layer Evidence Methodology}{85}{section.6.3}%
+\contentsline {chapter}{\numberline {7}Discussion}{87}{chapter.7}%
+\contentsline {section}{\numberline {7.1}Limitations}{87}{section.7.1}%
+\contentsline {subsection}{\numberline {7.1.1}Regtest Environment}{87}{subsection.7.1.1}%
+\contentsline {subsection}{\numberline {7.1.2}Reference Implementations}{88}{subsection.7.1.2}%
+\contentsline {subsection}{\numberline {7.1.3}Rational Adversary Assumption}{88}{subsection.7.1.3}%
+\contentsline {subsection}{\numberline {7.1.4}Threats Not Modeled}{89}{subsection.7.1.4}%
+\contentsline {section}{\numberline {7.2}Mitigations}{90}{section.7.2}%
+\contentsline {subsection}{\numberline {7.2.1}TRUC/v3 Transactions}{90}{subsection.7.2.1}%
+\contentsline {subsection}{\numberline {7.2.2}Batched Recovery}{91}{subsection.7.2.2}%
+\contentsline {subsection}{\numberline {7.2.3}Poelstra Reset Model}{91}{subsection.7.2.3}%
+\contentsline {section}{\numberline {7.3}Open Problems}{91}{section.7.3}%
+\contentsline {paragraph}{Temporal verification.}{91}{section*.74}%
+\contentsline {paragraph}{Cryptographic verification.}{92}{section*.75}%
+\contentsline {paragraph}{Cluster mempool impact.}{92}{section*.76}%
+\contentsline {paragraph}{Replacement cycling.}{92}{section*.77}%
+\contentsline {paragraph}{Multi-vault composition.}{92}{section*.78}%
+\contentsline {chapter}{\numberline {8}Related Work}{94}{chapter.8}%
+\contentsline {section}{\numberline {8.1}Vault Custody Protocols}{94}{section.8.1}%
+\contentsline {section}{\numberline {8.2}Covenant Proposals and Analysis}{95}{section.8.2}%
+\contentsline {section}{\numberline {8.3}Formal Verification of Bitcoin Contracts}{96}{section.8.3}%
+\contentsline {section}{\numberline {8.4}Layer-Two Security and Watchtower Economics}{98}{section.8.4}%
+\contentsline {section}{\numberline {8.5}Qualitative Comparisons}{99}{section.8.5}%
+\contentsline {section}{\numberline {8.6}Summary of Positioning}{99}{section.8.6}%
+\contentsline {chapter}{\numberline {9}Conclusion}{101}{chapter.9}%
+\contentsline {paragraph}{Result 1: Griefing--safety impossibility.}{101}{section*.80}%
+\contentsline {paragraph}{Result 2: Structural design-space decomposition.}{101}{section*.81}%
+\contentsline {paragraph}{Empirical corrections.}{102}{section*.82}%
+\contentsline {paragraph}{Batched recovery and ordering flip.}{102}{section*.83}%
+\contentsline {paragraph}{Original implementations.}{102}{section*.84}%
+\contentsline {paragraph}{Formal verification.}{103}{section*.85}%
+\contentsline {section}{\numberline {9.1}Future Work}{103}{section.9.1}%
+\contentsline {chapter}{Bibliography}{105}{chapter*.86}%
+\contentsline {chapter}{Appendices}{111}{section*.87}%
+\contentsline {chapter}{Appendix \numberline {A}Alloy Model Details}{112}{appendix.1.A}%
+\contentsline {section}{\numberline {A.1}Model Architecture}{112}{section.1.A.1}%
+\contentsline {paragraph}{\texttt {btc\_base.als}.}{112}{section*.89}%
+\contentsline {paragraph}{\texttt {vault\_base.als}.}{112}{section*.90}%
+\contentsline {paragraph}{Concrete vault models.}{113}{section*.91}%
+\contentsline {paragraph}{\texttt {threat\_model.als}.}{113}{section*.92}%
+\contentsline {paragraph}{\texttt {cross\_covenant.als}.}{113}{section*.93}%
+\contentsline {section}{\numberline {A.2}Per-Covenant Detailed Results}{114}{section.1.A.2}%
+\contentsline {paragraph}{CTV.}{114}{section*.94}%
+\contentsline {paragraph}{CCV.}{114}{section*.95}%
+\contentsline {paragraph}{OP\_VAULT.}{114}{section*.96}%
+\contentsline {paragraph}{CAT+CSFS.}{114}{section*.97}%
+\contentsline {paragraph}{Simplicity.}{114}{section*.98}%
+\contentsline {section}{\numberline {A.3}Limitations of the Formal Models}{115}{section.1.A.3}%
+\contentsline {chapter}{Appendix \numberline {B}Simplicity on Elements: The Unoccupied Optimal Corner}{116}{appendix.1.B}%
+\contentsline {section}{\numberline {B.1}Scope and Motivation}{116}{section.1.B.1}%
+\contentsline {section}{\numberline {B.2}Design-Space Position}{117}{section.1.B.2}%
+\contentsline {section}{\numberline {B.3}Lifecycle Measurements}{118}{section.1.B.3}%
+\contentsline {section}{\numberline {B.4}Foundations and Substrate}{118}{section.1.B.4}%
+\contentsline {section}{\numberline {B.5}Future Work: Porting the Optimal Corner to Bitcoin}{119}{section.1.B.5}%
+\contentsline {chapter}{Appendix \numberline {C}Rationality Block Template and Full Catalogue}{120}{appendix.1.C}%
+\contentsline {section}{\numberline {C.1}Purpose}{120}{section.1.C.1}%
+\contentsline {section}{\numberline {C.2}Class Z1{}: Fee-Channel Pinning}{120}{section.1.C.2}%
+\contentsline {paragraph}{(1) Attacker capability.}{120}{section*.99}%
+\contentsline {paragraph}{(2) Defender model.}{121}{section*.100}%
+\contentsline {paragraph}{(3) Economic preconditions.}{121}{section*.101}%
+\contentsline {paragraph}{(4) Protocol / network assumptions.}{121}{section*.102}%
+\contentsline {paragraph}{(5) Scope of validity.}{122}{section*.103}%
+\contentsline {paragraph}{(6) Rational-attacker check.}{122}{section*.104}%
+\contentsline {paragraph}{(7) Counter-factual mitigations.}{122}{section*.105}%
+\contentsline {section}{\numberline {C.3}Class Z2{}: Permissionless Griefing}{123}{section.1.C.3}%
+\contentsline {paragraph}{(1) Attacker capability.}{123}{section*.106}%
+\contentsline {paragraph}{(2) Defender model.}{123}{section*.107}%
+\contentsline {paragraph}{(3) Economic preconditions.}{123}{section*.108}%
+\contentsline {paragraph}{(4) Protocol / network assumptions.}{123}{section*.109}%
+\contentsline {paragraph}{(5) Scope of validity.}{124}{section*.110}%
+\contentsline {paragraph}{(6) Rational-attacker check.}{124}{section*.111}%
+\contentsline {paragraph}{(7) Counter-factual mitigations.}{124}{section*.112}%
+\contentsline {section}{\numberline {C.4}Class Z3{}: Per-UTXO Recovery-Cost Scaling}{124}{section.1.C.4}%
+\contentsline {paragraph}{(1) Attacker capability.}{124}{section*.113}%
+\contentsline {paragraph}{(2) Defender model.}{124}{section*.114}%
+\contentsline {paragraph}{(3) Economic preconditions.}{125}{section*.115}%
+\contentsline {paragraph}{(4) Protocol / network assumptions.}{125}{section*.116}%
+\contentsline {paragraph}{(5) Scope of validity.}{125}{section*.117}%
+\contentsline {paragraph}{(6) Rational-attacker check.}{125}{section*.118}%
+\contentsline {paragraph}{(7) Counter-factual mitigations.}{125}{section*.119}%
+\contentsline {paragraph}{Reframing note.}{126}{section*.120}%
+\contentsline {section}{\numberline {C.5}Class Z4{}: Hot-Key Theft via Destination Substitution}{126}{section.1.C.5}%
+\contentsline {paragraph}{(1) Attacker capability.}{126}{section*.121}%
+\contentsline {paragraph}{(2) Defender model.}{127}{section*.122}%
+\contentsline {paragraph}{(3) Economic preconditions.}{127}{section*.123}%
+\contentsline {paragraph}{(4) Protocol / network assumptions.}{127}{section*.124}%
+\contentsline {paragraph}{(5) Scope of validity.}{127}{section*.125}%
+\contentsline {paragraph}{(6) Rational-attacker check.}{127}{section*.126}%
+\contentsline {paragraph}{(7) Counter-factual mitigations.}{127}{section*.127}%
+\contentsline {section}{\numberline {C.6}Class Z5{}: Cold-Key Theft via Unconstrained Recovery}{128}{section.1.C.6}%
+\contentsline {paragraph}{(1) Attacker capability.}{128}{section*.128}%
+\contentsline {paragraph}{(2) Defender model.}{128}{section*.129}%
+\contentsline {paragraph}{(3) Economic preconditions.}{128}{section*.130}%
+\contentsline {paragraph}{(4) Protocol / network assumptions.}{128}{section*.131}%
+\contentsline {paragraph}{(5) Scope of validity.}{128}{section*.132}%
+\contentsline {paragraph}{(6) Rational-attacker check.}{129}{section*.133}%
+\contentsline {paragraph}{(7) Counter-factual mitigations.}{129}{section*.134}%
+\contentsline {section}{\numberline {C.7}Class Z6{}: Mode/Parameter Bypass}{129}{section.1.C.7}%
+\contentsline {paragraph}{(1) Attacker capability.}{129}{section*.135}%
+\contentsline {paragraph}{(2) Defender model.}{129}{section*.136}%
+\contentsline {paragraph}{(3) Economic preconditions.}{129}{section*.137}%
+\contentsline {paragraph}{(4) Protocol / network assumptions.}{129}{section*.138}%
+\contentsline {paragraph}{(5) Scope of validity.}{130}{section*.139}%
+\contentsline {paragraph}{(6) Rational-attacker check.}{130}{section*.140}%
+\contentsline {paragraph}{(7) Counter-factual mitigations.}{130}{section*.141}%
+\contentsline {paragraph}{Framing note.}{130}{section*.142}%

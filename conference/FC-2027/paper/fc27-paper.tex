@@ -1,0 +1,167 @@
+% FC 2027 paper — The Cost of Custody
+% Target: 15pp Springer LNCS main body, unlimited references + appendix
+% Double-blind submission
+
+\documentclass[runningheads]{llncs}
+
+% ===================== Packages =====================
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{mathtools}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage[inline]{enumitem}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{shapes,arrows.meta,positioning,calc,fit,backgrounds}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{siunitx}
+\usepackage{url}
+\usepackage{microtype}
+\usepackage[bookmarksnumbered,hidelinks]{hyperref}
+
+% ===================== Custom macros =====================
+% Transaction size units
+\newcommand{\vB}{\text{\,vB}}
+\newcommand{\satvB}{\text{\,sat/vB}}
+
+% Design / proposal names — roman, short OP_ prefix throughout. The
+% full opcode names are glossed once on first use; thereafter we use
+% these shorthands uniformly. For an actual opcode invocation in a
+% code-like context (e.g.\ in an assertion or script listing), wrap
+% locally in \texttt{...}.
+\newcommand{\opctv}{OP\_CTV}
+\newcommand{\opccv}{OP\_CCV}
+\newcommand{\opvault}{OP\_VAULT}
+\newcommand{\opvaultrecover}{OP\_VAULT\_RECOVER}
+\newcommand{\opcat}{OP\_CAT}
+\newcommand{\opcsfs}{OP\_CSFS}
+\newcommand{\catcsfs}{\opcat{}+\opcsfs{}}
+
+% Bitcoin concept names
+\newcommand{\csv}{\texttt{OP\_CSV}}
+\newcommand{\sighash}[1]{\texttt{SIGHASH\_#1}}
+
+% Design-space axis labels --- canonical, see conference/AXES.md.
+% Use these macros in every axis reference across FC paper and thesis;
+% do not introduce synonyms (no "recovery-auth" where \axauth{} applies).
+\newcommand{\axauth}{A1}          % Recovery authorisation  (formal: g)
+\newcommand{\axrevault}{A2}       % Revault support         (formal: a)
+\newcommand{\axfee}{A3}           % Fee-inclusion model     (formal: f)
+\newcommand{\axwdbind}{A4}        % Withdrawal-destination binding (subcomp. of b)
+\newcommand{\axrecbind}{A5}       % Recovery-destination binding   (subcomp. of b)
+\newcommand{\axopsurf}{A6}        % Opcode surface          (new)
+\newcommand{\axintro}{A7}         % Introspection primitive (new)
+
+% Axis-with-formal-symbol aside (for proof-relevant passages).
+\newcommand{\axauthf}{\axauth\,($g$)}
+\newcommand{\axrevaultf}{\axrevault\,($a$)}
+\newcommand{\axfeef}{\axfee\,($f$)}
+\newcommand{\axbindf}{\axwdbind{}+\axrecbind\,($b$)}
+
+% Attack-class labels --- canonical, see conference/AXES.md §4.
+\newcommand{\classfee}{Z1}        % Fee-channel pinning
+\newcommand{\classgrief}{Z2}      % Permissionless griefing
+\newcommand{\classscale}{Z3}      % Per-UTXO recovery-cost scaling
+\newcommand{\classhot}{Z4}        % Hot-key theft via destination substitution
+\newcommand{\classcold}{Z5}       % Cold-key theft via unconstrained recovery
+\newcommand{\classmode}{Z6}       % Mode/parameter bypass
+
+% Draft-mode \todo — replaced or removed before submission
+\newcommand{\todo}[2][]{\textbf{[TODO: #2]}}
+
+% Measured-value placeholders. These render as [?] until the regtest
+% harness produces the corresponding measurement (see
+% vault-comparison/experiments/exp_watchtower_exhaustion.py Phase 6a).
+% Replace each \measured{...} call with the numeric value before submission.
+\newcommand{\measured}[1]{\textbf{[measured:#1]}}
+
+% Batched-recovery constants — placeholders until Phase 6a runs on regtest
+\newcommand{\overheadCCV}{54}
+\newcommand{\perinputCCV}{68}
+\newcommand{\overheadOPV}{154}
+\newcommand{\perinputOPV}{92}
+
+% ===================== Theorem environments =====================
+% LNCS already defines theorem, definition, proposition, corollary, proof
+% via \spnewtheorem in llncs.cls. No additional definitions needed.
+
+% ===================== Paper metadata =====================
+\title{The Cost of Custody}
+\titlerunning{The Cost of Custody}
+
+% Double-blind: authors anonymized until acceptance
+\author{Anonymous Authors}
+\authorrunning{Anonymous Authors}
+\institute{Anonymous Institution\\
+\email{anonymous@submission.invalid}}
+
+\begin{document}
+
+\maketitle
+
+% ===================== Abstract =====================
+\begin{abstract}
+Bitcoin vaults encumber self-custodied funds with a time-delayed
+spending path, allowing a compromised hot-key spend to be intercepted
+and redirected to cold storage. Four script-extension proposals are
+presently under review as candidates for enabling this pattern.
+Practitioners must choose among them, yet no systematic cross-design
+security analysis has been published.
+
+We put forth a systematisation of the covenant-vault design space.
+Our approach decomposes each design into four nearly-orthogonal
+axes---a fee-payment model, an amount-flexibility policy, a
+recovery-gating mechanism, and a recovery binding---each of which
+deterministically opens a specific class of attack surface. We
+formalise a unified defender-loss metric combining theft, griefing,
+and dust-lockup outcomes, and identify a \emph{dominant corner} of
+the 4D lattice: the feature combination at which all four surfaces
+are closed simultaneously. No proposed Bitcoin Script extension
+occupies this corner; each falls short in at least one axis, and
+which axis it misses predicts the attack class that bites it.
+
+We apply the framework to the four proposals, classify each in the
+lattice, and validate the predicted vulnerability profiles with 15
+regtest experiments and bounded model checking in Alloy (42
+assertions across five formal models). We additionally measure
+batched-recovery cost scaling and show that the safety ranking
+between two proposals inverts depending on whether the watchtower
+batches recovery---an operator-dependence that prior work has not
+surfaced. A Simplicity vault on a Bitcoin-adjacent federated
+sidechain serves as a cross-substrate reference point.
+
+Our work shows that the cost of custody is not a single number but
+a function of design choice, threat model, fee regime, and
+watchtower strategy, and identifies a structurally-safer corner of
+the design space that the current specification corpus has not yet
+occupied.
+\end{abstract}
+
+% ===================== Sections =====================
+\input{sections/01-introduction}
+\input{sections/02-background}
+\input{sections/03-impossibility}
+\input{sections/04-empirical}
+\input{sections/05-deployment}
+\input{sections/06-related}
+\input{sections/07-discussion}
+\input{sections/08-conclusion}
+
+% ===================== Bibliography =====================
+\bibliographystyle{splncs04}
+\bibliography{references}
+
+% ===================== Appendix =====================
+\appendix
+\input{appendix-a-alloy}
+\input{appendix-b-threat-matrix}
+\input{appendix-c-measurements}
+\input{appendix-d-simplicity}
+
+\end{document}

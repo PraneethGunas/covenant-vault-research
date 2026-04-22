@@ -1,0 +1,189 @@
+\chapter{Introduction} \label{ch:introduction}
+
+Bitcoin's custody model places the entire burden of key security on the asset holder.
+A compromised private key results in irreversible fund loss, with no recourse mechanism
+built into the protocol. Covenant-based vaults address this by interposing a time-delayed
+spending path between key compromise and fund movement: when the hot key initiates a
+withdrawal, a configurable delay window allows a watchtower to detect the unauthorized
+spend and trigger emergency recovery to a cold storage address~\cite{SHMB20, MES16}.
+
+Four concrete covenant proposals have emerged as candidates for Bitcoin activation:
+\opctv{}~\cite{BIP119}, \opccv{}~\cite{BIP443}, \opvault{}~\cite{BIP345}, and
+\catcsfs{}~\cite{BIP347, BIP348}. Each enforces the vault lifecycle through a different
+mechanism. CTV pre-commits to the exact transaction structure at vault creation time.
+CCV validates contract state transitions dynamically at spend time. OP\_VAULT provides
+dedicated vault opcodes with built-in recovery authorization. CAT+CSFS composes two
+general-purpose opcodes to achieve transaction introspection via dual signature
+verification. A fifth design, built with the Simplicity language on the Elements
+sidechain~\cite{OC17}, demonstrates what covenant enforcement looks like with full
+transaction introspection and no soft-fork dependency.
+
+Despite active community deliberation on which proposal to activate---including a
+66-developer open letter requesting Bitcoin Core prioritize CTV+CSFS
+review~\cite{CTVCSFS25}, calls for comprehensive analysis before
+activation~\cite{Poinsot25, Towns25}, and the subsequent withdrawal of BIP-345
+in favor of BIP-443~\cite{OB25}---no published work compares these designs
+empirically. The BIP
+specifications describe each opcode in isolation. Qualitative comparison matrices
+exist~\cite{covenants_info}, but they contain no transaction sizes, no attack cost
+functions, and no fee-environment analysis. The only quantitative estimate in the
+literature is Harding's back-of-envelope calculation of watchtower splitting capacity
+at approximately 3{,}000 splits per block~\cite{Har24}, based on assumed---not
+measured---transaction sizes.
+
+This thesis fills that gap. We build all four Bitcoin vault implementations, instrument
+them through a uniform adapter interface, and run 15 experiments on regtest measuring
+transaction costs, security properties, and capability differences. We additionally
+build two original vault implementations---a CAT+CSFS vault using the explicit
+\texttt{OP\_CHECKSIGFROMSTACK} (BIP-348) dual verification pattern, and a Simplicity
+vault on Elements using jet-based covenant enforcement---and develop Alloy bounded
+model checking specifications for all five designs.
+
+\section{Main Results} \label{se:main_results}
+
+Two results constrain the design space of covenant vaults.
+
+\paragraph{Griefing--safety impossibility.}
+Recovery in a covenant vault is either permissionless (anyone can invoke it, as in CCV)
+or key-gated (requiring a specific key, as in OP\_VAULT). Permissionless recovery
+maximizes fund safety under key loss---the owner never loses the ability to recover---but
+enables denial-of-service griefing by any third party who can broadcast a recovery
+transaction. Key-gated recovery eliminates griefing but introduces key-loss risk: if the
+recovery authorization key is lost, funds become permanently unrecoverable. We formalize
+this as Proposition~\ref{thm:griefing_safety} in Chapter~\ref{ch:security}: no covenant vault
+simultaneously achieves permissionless recovery and griefing resistance. This tradeoff is
+a design constraint, not an implementation artifact.
+
+\paragraph{Per-threat worst-case characterization.}
+CTV vaults are vulnerable to descendant-chain fee pinning, where an attacker constructs
+25 low-value transactions off the unvault output to block the watchtower's
+child-pays-for-parent recovery. CCV and OP\_VAULT vaults are vulnerable to watchtower
+exhaustion, where an attacker repeatedly splits the vault into smaller UTXOs until
+individual recovery transactions become uneconomical. Rather than aggregating
+disparate attack outcomes (theft versus griefing) into a single ``security ranking'',
+we formalise a per-strategy defender-loss metric~$\mathcal{L}$ and characterise, threat
+by threat, how~$\mathcal{L}$ varies across designs with the fee rate~$r$ and the
+defender's batching strategy. The per-threat analysis surfaces a combinatorial
+impossibility---no design minimises $\mathcal{L}$ across all threats and fee
+rates---that is a direct corollary of the orderings, not a standalone claim about
+``safest'' designs.
+
+\section{Contributions} \label{se:contributions}
+
+This work makes seven contributions:
+
+\begin{enumerate}
+\item \textbf{First empirical comparison of the four Bitcoin Script extensions.}
+  Regtest-measured transaction sizes for CTV, CCV, OP\_VAULT, and CAT+CSFS under a
+  uniform adapter interface, spanning 15~experiments and 11~threat models. We correct
+  prior hand-estimates of OP\_VAULT trigger transaction size from approximately
+  200\vB{} to 292\vB{} (a 46\% error), revealing that OP\_VAULT's lifecycle is 36\% more
+  expensive than CCV's.
+
+\item \textbf{Formal adversary-advantage framework.}
+  A defender-loss metric~$\mathcal{L}(\mathrm{TM}, D, V, r, b)$ and adversary-advantage
+  metric~$\mathrm{Adv}$ (Definitions~\ref{def:strategy_costs}
+  and~\ref{def:loss_adv}) that uniformly compare theft, griefing, and dust-lockup
+  outcomes across threat models, fee rates, and defender batching strategies.
+
+\item \textbf{Per-threat worst-case characterisation.}
+  For each of TM1--TM11, a closed-form or bounded expression for~$\mathcal{L}$
+  across designs as a function of fee rate, including the dust-threshold rate
+  $r^\dagger$ for per-UTXO recovery-cost scaling (Section~\ref{se:thm_inversion}).
+
+\item \textbf{Griefing--safety impossibility (Proposition~\ref{thm:griefing_safety}).}
+  No covenant vault achieves both permissionless recovery and griefing resistance.
+
+\item \textbf{Structural design-space decomposition
+  (Proposition~\ref{thm:fee_inversion}).}
+  A four-dimensional decomposition of covenant-vault design choices
+  ($f$: fee model; $a$: amount flexibility; $g$: recovery gating;
+  $b$: recovery binding). Each dimension has a deterministic
+  feature-to-vulnerability implication
+  (Lemmas~\ref{lem:anchor_pinning}--\ref{lem:unbound_theft}). No
+  proposed Bitcoin Script extension occupies the dominant corner
+  $(f_{\neq\text{anchor}}, a_{\text{atomic}}, g_{\text{key}},
+  b_{\text{bound}})$; each falls short by at least one dimension with
+  a corresponding vulnerability surface.
+
+\item \textbf{Batched-defender measurements and ordering-flip finding.}
+  On-chain measurements of BIP-345 and BIP-443 batched recovery yield
+  $(\alpha, \beta) = (54, 68)$\vB{} for CCV and $(154, 92)$\vB{} for OP\_VAULT. The
+  batched dust-threshold rate $r^\dagger$ rises by $1.8\times$ (CCV) and $2.7\times$
+  (OP\_VAULT), and the CCV/OP\_VAULT ordering under per-UTXO recovery-cost scaling reverses
+  (Section~\ref{ss:batched_defender}).
+
+\item \textbf{Two original vault implementations and Alloy formal verification.}
+  A CAT+CSFS vault using the explicit \texttt{OP\_CHECKSIGFROMSTACK} (BIP-348) opcode
+  for dual signature verification, distinct from prior OP\_CAT-only vaults that
+  achieve introspection via the Schnorr G-trick without CSFS~\cite{Poe21,
+  Rij24}. Additionally, a Simplicity vault using \texttt{jet::outputs\_hash()} on
+  Elements regtest via the Simplex SDK, treated throughout as a cross-substrate
+  reference point rather than a peer of the four Bitcoin proposals. Five Alloy
+  models verify fund conservation, recovery liveness, and no-extraction properties.
+\end{enumerate}
+
+\section{Scope and Limitations} \label{se:scope}
+
+All experiments run on Bitcoin Core regtest (or Elements regtest for Simplicity).
+Transaction virtual size (vsize) is the primary metric; it is structurally deterministic
+and identical on regtest and mainnet. Fee amounts are computed as projections
+($\text{fee} = \text{vsize} \times r$, where $r$ is an exogenous fee rate) rather than
+measured directly, because regtest has no fee market. Temporal dynamics of recovery
+races---where confirmation latency determines whether the watchtower or the attacker
+wins---are not captured, because regtest mines blocks on demand.
+
+The four Bitcoin Script extension proposals are tested using their reference
+implementations: \texttt{simple-ctv-vault}~\cite{BIP119}, \texttt{pymatt}~\cite{BIP443},
+\texttt{opvault-demo}~\cite{BIP345}, and our \texttt{cat-csfs-vault}. Where a reference
+implementation has a bug or missing feature, we distinguish this from a design-level
+property of the underlying BIP. Simplicity on Elements is included throughout as a
+cross-substrate reference point rather than a peer of the four Bitcoin proposals.
+Elements is a federated sidechain with functionary block production rather than
+proof-of-work, and the threat taxonomy does not transfer identically across that
+substrate boundary. Our formal results
+(Proposition~\ref{thm:fee_inversion}, Proposition~\ref{thm:griefing_safety}) therefore
+range over the four Bitcoin Script extensions only; Simplicity measurements are
+presented separately.
+
+Protocol-layer constructs such as Ark and BitVM are excluded. Both operate above the
+opcode level---Ark uses an operator-mediated virtual UTXO model, BitVM uses off-chain
+fraud proofs---and require modeling interactive communication rounds that fall outside
+our single-transaction covenant framework.
+
+\section{Thesis Organization} \label{se:organization}
+
+Chapter~\ref{ch:background} surveys the four Bitcoin Script extension proposals and
+introduces Simplicity as an alternative script primitive on Elements, defining the
+vault lifecycle model and threat taxonomy used throughout.
+Chapter~\ref{ch:methodology} describes the measurement framework, adapter architecture,
+and regtest validity analysis. Chapter~\ref{ch:results} presents the empirical
+measurements: lifecycle costs, batching efficiency, revault amplification, and the
+corrections to prior estimates. Chapter~\ref{ch:security} contains the core security
+analysis, including Propositions~\ref{thm:griefing_safety}
+and~\ref{thm:fee_inversion},
+parameterized attack cost functions, and the full threat model matrix.
+Chapter~\ref{ch:verification} describes the Alloy formal verification methodology and
+results. Chapter~\ref{ch:discussion} discusses limitations, deployment guidance, and
+open problems. Chapter~\ref{ch:related} positions this work relative to prior vault
+security research. Chapter~\ref{ch:conclusion} summarizes findings and future directions.
+
+\begin{table}[t]
+\centering
+\caption{Five covenant vault designs compared in this work. ``BIP status'' refers
+to the proposal's standing in the Bitcoin Improvement Proposal process, not
+deployment on mainnet---none of the Bitcoin proposals are activated on mainnet
+as of April 2026.}
+\label{tab:designs_overview}
+\begin{tabular}{@{}llllc@{}}
+\toprule
+Design & BIP & Enforcement mechanism & Chain & BIP status \\
+\midrule
+CTV        & 119       & Template hash commitment   & Bitcoin  & Proposed \\
+CCV        & 443       & Contract state verification & Bitcoin  & Proposed \\
+OP\_VAULT  & 345       & Dedicated vault opcodes     & Bitcoin  & Withdrawn \\
+CAT+CSFS   & 347 + 348 & Dual signature introspection & Bitcoin & Proposed \\
+Simplicity & ---       & Jet-based introspection     & Elements & Deployed \\
+\bottomrule
+\end{tabular}
+\end{table}

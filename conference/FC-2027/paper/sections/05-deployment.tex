@@ -1,0 +1,97 @@
+% §5 Deployment Guidance --- Target 1.5pp
+
+\section{Deployment Guidance}
+\label{sec:deployment}
+
+The per-class analysis of Sections~\ref{sec:imposs:class_fee}--\ref{sec:imposs:class_mode}
+and the empirical thresholds of Section~\ref{sec:empirical} yield a
+deployment matrix keyed on four parameters: (i) fee regime, (ii)
+whether the watchtower batches recovery, (iii) whether the deployment
+prioritises hot-key theft resistance or key-loss resilience, and (iv)
+whether the deployment tolerates a federated sidechain for the
+dominant-corner properties. All recommendations are derived as
+counter-factual readings of the class rationality blocks
+(Appendix~\ref{app:rationality}); none are asserted outside that
+structure. All recommendations assume the Kerckhoffs threat model of
+Section~\ref{sec:bg:lifecycle}: the attacker is taken to know the
+deployment's axis values.
+
+\begin{table}[t]
+\centering
+\caption{Deployment recommendations keyed on fee regime, watchtower
+batching capability, and the deployment's priority (hot-key theft
+resistance vs.\ key-loss resilience). Each recommendation is a
+counter-factual reading of the class rationality blocks. ``Defer
+to corner'' = none of the Bitcoin proposals is
+class-free in this cell; operator must pick by risk weighting, or
+accept federated trust to deploy on Simplicity
+(Appendix~\ref{app:simplicity}).}
+\label{tab:deployment}
+\footnotesize
+\setlength{\tabcolsep}{2.5pt}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}lllll@{}}
+\toprule
+Fee regime                           & Batching        & Priority              & Recommended    & Rationale (class counter-factual)                                                   \\
+\midrule
+Low ($\leq 10\satvB{}$)              & either          & theft-resistance      & \catcsfs{}     & \classhot{} immune by \axwdbind{} dual-bind; \classscale{} N/A at low $r$           \\
+Low ($\leq 10\satvB{}$)              & either          & key-loss resilience   & \opccv{}       & \classgrief{} low-cost at low $r$; key-loss covered by \axauth{} = keyless          \\
+Mid ($10$--$100\satvB{}$)            & batched         & either                & \opvault{}     & \classscale{} mitigated by batching (\classscale{} §counter-factual)                \\
+Mid ($10$--$100\satvB{}$)            & unbatched       & theft-resistance      & \catcsfs{}     & As above; unbatched defenders cannot safely absorb \classscale{} above $r^\dagger$  \\
+Mid ($10$--$100\satvB{}$)            & unbatched       & key-loss resilience   & Defer to corner & No axis-A1 = keyless design without \classscale{} susceptibility among Bitcoin proposals \\
+High ($\geq 100\satvB{}$)            & batched         & either                & \opvault{}     & Batched $r^\dagger \approx 159\satvB{}$; no anchor to pin                           \\
+High ($\geq 100\satvB{}$)            & unbatched       & either                & \opctv{}       & \classfee{} cost $r$-invariant; \classscale{} N/A by \axrevault{} = no              \\
+High, post-TRUC~\cite{TRUC}          & either          & either                & \opctv{}       & \classfee{} eliminated at relay-policy level; no other class active                 \\
+Any                                  & any             & all classes zero      & Simplicity     & Appendix~\ref{app:simplicity}; accepts federated trust                              \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Reading the table.} Each row is a deployment scenario; the
+Recommended column cites the design whose class exposures zero-out
+most efficiently under the row's conditions; the Rationale column
+names the specific counter-factual from the corresponding class
+rationality block. Class \classfee{} (TM1) is eliminated \emph{at the
+relay-policy level} by TRUC/BIP-431~\cite{TRUC}: when a \opctv{}
+unvault uses a TRUC transaction type, the descendant limit collapses
+to $1$ and the pinning surface vanishes. This is the single most
+impactful deployment decision an \opctv{} operator can make.
+
+\paragraph{Watchtower reserve sizing.}
+For a $V = 0.5$~BTC vault at a fee rate of $100\satvB{}$ defending
+against roughly one thousand unbatched \opccv{} splits, the recovery
+budget is about $12.2$M~sats (${\sim}24\%$ of the vault value); the
+same scenario under batching costs about $6.8$M~sats
+(${\sim}14\%$), a direct consequence of the $1.8\times$
+improvement in the single-block-feasibility threshold. Operators
+should size reserves against the 95th-percentile fee rate of the
+target deployment window and test the emergency-recovery path
+quarterly.
+
+\paragraph{Recovery-key storage policy.}
+Proposition~\ref{thm:griefing_safety} forces a binary choice on axis
+\axauth{}. Operators who prioritise fund safety under key loss
+(\axauth{} = \texttt{keyless}, \opccv{}) accept griefing exposure
+(class \classgrief{}) and must budget for the recovery-griefing
+scenario (Appendix~\ref{app:rationality}, \classgrief{}). Operators
+who prioritise griefing resistance (\axauth{} $\neq$
+\texttt{keyless}, \opctv{}/\opvault{}/\catcsfs{}) reintroduce
+key-loss risk and must use hardware-grade cold-key protection ---
+particularly acute for \catcsfs{}, whose recovery leaf is
+output-unconstrained (\axrecbind{} = \texttt{plain-signature},
+class \classcold{}).
+
+\paragraph{What the table does not say.}
+Numerical thresholds ($r^\dagger$, reserve percentages) are
+\emph{derived}, not \emph{axiomatic}. They depend on $V$, on the
+watchtower's block budget, and on measured transaction sizes
+(Table~\ref{tab:vsizes}). An operator with a different vault value
+or a different blocks-per-recovery budget must resubstitute into
+Eq.~\ref{eq:r-dagger} rather than treat this table's thresholds as
+constants. The class derivations
+(Sections~\ref{sec:imposs:class_fee}--\ref{sec:imposs:class_mode})
+are the operator-independent content; the table is the
+operator-parameterised specialisation for the reference
+$V = 0.5$~BTC case.
+
+\providecommand{\todo}[2][]{\textbf{[TODO: #2]}}

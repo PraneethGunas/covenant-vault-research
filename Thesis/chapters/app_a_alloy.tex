@@ -1,0 +1,141 @@
+\chapter{Alloy Model Details} \label{app:alloy_details}
+
+This appendix provides the model architecture, per-module descriptions, and
+detailed per-covenant verification results summarized in
+Chapter~\ref{ch:verification}.
+
+% ======================================================================
+\section{Model Architecture}
+
+The Alloy models follow a three-layer inheritance hierarchy
+(Figure~\ref{fig:alloy_hierarchy}).
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+  box/.style={rectangle, draw, rounded corners=3pt, minimum width=2cm,
+              minimum height=0.7cm, font=\footnotesize, align=center},
+  base/.style={box, fill=gray!15},
+  concrete/.style={box, fill=blue!8},
+  cross/.style={box, fill=orange!10, dashed},
+  >=stealth, thick,
+  node distance=0.6cm,
+]
+  \node[base] (btc) {\texttt{btc\_base}};
+  \node[base, right=2cm of btc] (vault) {\texttt{vault\_base}};
+  \draw[->] (btc) -- node[above, font=\scriptsize] {opens} (vault);
+
+  \node[concrete, below=1.8cm of vault, xshift=-4cm] (ctv)
+    {\texttt{ctv\_vault}};
+  \node[concrete, right=0.25cm of ctv] (ccv)
+    {\texttt{ccv\_vault}};
+  \node[concrete, right=0.25cm of ccv] (opv)
+    {\texttt{opvault}};
+  \node[concrete, right=0.25cm of opv] (cat)
+    {\texttt{cat\_csfs}};
+  \node[concrete, right=0.25cm of cat] (sim)
+    {\texttt{simplicity}};
+
+  \foreach \c in {ctv, ccv, opv, cat, sim}
+    \draw[->] (vault) -- (\c);
+
+  \node[cross, right=1cm of sim, yshift=0.9cm] (threat)
+    {\texttt{threat\_model}};
+  \draw[->, dashed] (threat) -- (sim);
+  \draw[->, dashed] (threat.south west) -- (cat.north east);
+
+  \node[cross, below=1cm of opv] (cross)
+    {\texttt{cross\_covenant}};
+  \draw[->, dashed] (ccv) -- (cross);
+  \draw[->, dashed] (opv) -- (cross);
+
+  \node[font=\scriptsize, text=gray, anchor=west] at (threat.east)
+    [xshift=0.2cm] {\itshape used by all};
+\end{tikzpicture}
+\caption{Alloy model hierarchy. \texttt{btc\_base} defines UTXOs, keys, and
+transactions. \texttt{vault\_base} defines the abstract vault state machine.
+Five concrete models extend the base with covenant-specific transition guards.
+\texttt{threat\_model} and \texttt{cross\_covenant} are cross-cutting modules.}
+\label{fig:alloy_hierarchy}
+\end{figure}
+
+\paragraph{\texttt{btc\_base.als}.}
+Defines the Bitcoin transaction model: signatures for \texttt{UTXO}, \texttt{Key},
+\texttt{Transaction}, and \texttt{Address}. UTXOs have an amount, owner key, and
+spent status. Transactions consume inputs and produce outputs. This module provides
+the vocabulary shared by all vault models.
+
+\paragraph{\texttt{vault\_base.als}.}
+Defines the abstract vault state machine: four states (\texttt{VAULTED},
+\texttt{UNVAULTING}, \texttt{WITHDRAWN}, \texttt{RECOVERED}), transitions between
+states (trigger, withdraw, recover), and the \texttt{VaultFamily} concept that groups
+UTXOs belonging to the same vault instance. The CSV delay is modeled as an integer
+field on each vault UTXO. Properties defined at this level (fund conservation,
+recovery liveness) apply uniformly to all concrete models.
+
+\paragraph{Concrete vault models.}
+Each of the five models extends \texttt{vault\_base} with covenant-specific
+transition guards. \texttt{ccv\_vault} models the CCV mode enumeration
+and the OP\_SUCCESS behavior for undefined modes. \texttt{opvault\_vault} models
+the three-key separation and authorized recovery. \texttt{cat\_csfs\_vault} models
+the dual-verification binding and unconstrained recovery leaf.
+
+\paragraph{\texttt{threat\_model.als}.}
+Defines attacker profiles by specifying which keys the attacker controls. Properties
+are checked under each profile to determine the minimum capability needed for each
+attack class.
+
+\paragraph{\texttt{cross\_covenant.als}.}
+Models interactions between vault instances from different covenant types sharing the
+same UTXO set. Checks whether cross-vault injection is possible and whether fee
+wallet contention between concurrent OP\_VAULT operations can block recovery.
+
+% ======================================================================
+\section{Per-Covenant Detailed Results}
+
+\paragraph{CTV.}
+All six checks pass: no unauthorized extraction (with no keys and with hot key only),
+CSV enforcement, no state proliferation, eventual withdrawal, and recovery liveness.
+The address reuse scenario finds an instance where a second deposit creates an
+unspendable UTXO, confirming the structural vulnerability (TM7).
+
+\paragraph{CCV.}
+All seven checks pass, including the mode confusion containment check (undefined
+modes trigger OP\_SUCCESS but only within the affected leaf---the vault's other
+leaves remain secure). The griefing scenario demonstrates that any party can invoke
+recovery without keys (TM2). The splitting scenario shows the revault chain that
+enables the per-UTXO recovery-cost scaling of class Z3 (TM4).
+
+\paragraph{OP\_VAULT.}
+All eight checks pass, including the dual-key-no-theft property (trigger +
+recoveryauth compromise produces liveness denial but not fund theft, because the
+recovery address is pre-committed). The key-loss scenario demonstrates permanent
+inability to recover if the recoveryauth key is destroyed.
+
+\paragraph{CAT+CSFS.}
+Five of six checks pass. The \texttt{catcsfsNoExtraction\_ColdKeyOnly} check
+\emph{fails}: the Alloy Analyzer finds a trace where the cold key holder invokes
+recovery with an attacker-controlled output address, extracting funds. This is the
+structural confirmation of TM11 and the only expected assertion failure across all
+models. The destination lock and CSV enforcement checks pass.
+
+\paragraph{Simplicity.}
+All six checks pass: no extraction under any single-key compromise, output binding
+enforcement, CSV enforcement, and no state proliferation. The recovery-constrained
+scenario confirms that cold key compromise can only recover to the pre-committed
+address (unlike CAT+CSFS).
+
+% ======================================================================
+\section{Limitations of the Formal Models}
+
+The Alloy models operate at the state-machine level, abstracting away cryptographic
+primitives, serialization details, and temporal dynamics. Signatures are modeled as
+key-possession checks (if the attacker holds the key, the signature succeeds). Hash
+functions are assumed collision-resistant. Network propagation, mining centralization,
+and mempool dynamics are not modeled. These abstractions mean the Alloy verification
+confirms \emph{structural} properties (state reachability, authorization requirements)
+but not \emph{cryptographic} properties (signature unforgeability, hash binding) or
+\emph{temporal} properties (race conditions, confirmation timing). The regtest
+experiments partially compensate for the temporal gap by demonstrating actual
+transaction construction and broadcast, while the cryptographic properties are
+inherited from the underlying BIP-340 Schnorr and SHA-256 specifications.
