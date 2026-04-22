@@ -1,3 +1,12 @@
+"""FRAMING TAGS (conference/AXES.md canonical reference)
+    Class: Operational-correctness (not an attack class)
+    Enabling axis-value: A4=template-hash-digest (CTV) consequence
+    Susceptible covenants: CTV (second deposit creates unspendable UTXO), CAT+CSFS (analogous)
+    Immune covenants: CCV, OP_VAULT (independent contract-instance per deposit)
+    Notes: Explicitly self-inflicted; threat model None. Not a Z-class. This experiment measures an operational-risk property of the axis-A4 template-hash-digest value.
+    (Full Rationality-and-Scope block: Thesis Appendix D; FC Appendix B.2.)
+"""
+
 """Experiment B: Address Reuse Behavior
 
 Tests what happens when a second deposit is made to the same vault address.

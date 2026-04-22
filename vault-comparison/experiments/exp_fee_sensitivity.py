@@ -1,3 +1,12 @@
+"""FRAMING TAGS (conference/AXES.md canonical reference)
+    Class: Cross-cutting synthesis (not a single class)
+    Enabling axis-value: A3 and A2 consequences joined to fee-rate
+    Susceptible covenants: Varies by class
+    Immune covenants: Varies
+    Notes: Fee-sensitivity analysis spans classes Z1 and Z3. Simplicity mentions are cross-substrate reference scope-carve-out (see AXES.md §10).
+    (Full Rationality-and-Scope block: Thesis Appendix D; FC Appendix B.2.)
+"""
+
 """Experiment J: Fee Environment Sensitivity Analysis
 
 Synthesizes vsize measurements from all experiments and computes
@@ -781,7 +790,7 @@ def _section_synthesis(result):
     )
     result.observe(
         "   CROSSOVER: The inversion occurs around 50-100 sat/vB, where "
-        "watchtower exhaustion transitions from infeasible to feasible.  "
+        "per-UTXO recovery-cost scaling transitions from infeasible to feasible.  "
         "Prior analyses compared designs at a single fee point — this "
         "masks the crossover entirely."
     )
@@ -794,7 +803,7 @@ def _section_synthesis(result):
     )
     result.observe(
         "   PRIOR ART: The individual vulnerabilities (fee pinning, keyless "
-        "griefing, watchtower exhaustion) were identified by prior work "
+        "griefing, per-UTXO recovery-cost scaling) were identified by prior work "
         "(see REFERENCES.md).  The fee-dependent inversion of their "
         "relative severity is, to our knowledge, a novel empirical finding."
     )
@@ -859,12 +868,12 @@ def _section_synthesis(result):
         "   policy (Bitcoin Core 27.x / 28.x)."
     )
     result.observe(
-        "   CCV worst case: watchtower exhaustion → partial fund loss when "
+        "   CCV worst case: per-UTXO recovery-cost scaling → partial fund loss when "
         "   watchtower budget exceeded.  Keyless griefing → indefinite "
         "   withdrawal delay.  Mitigated by batched recovery."
     )
     result.observe(
-        "   OP_VAULT worst case: trigger key + splitting → watchtower exhaustion "
+        "   OP_VAULT worst case: trigger key + splitting → per-UTXO recovery-cost scaling "
         "   (same as CCV).  Recoveryauth compromise → liveness denial (higher "
         "   bar than CCV's keyless griefing).  Fee model avoids pinning."
     )
@@ -1097,13 +1106,13 @@ def _section_robustness_bounds(result):
     result.observe("\n--- Fee-dependent crossover robustness ---")
     result.observe(
         "The central finding (Finding 4) is that security rankings invert "
-        "around 50-100 sat/vB. This crossover depends on watchtower exhaustion "
+        "around 50-100 sat/vB. This crossover depends on per-UTXO recovery-cost scaling "
         "vsizes (CCV trigger=162, recover=122; OP_VAULT trigger=292, recover=246) "
         "which are ALL MEASURED, not estimated."
     )
     result.observe(
         "CTV_TOCOLD does not affect the crossover point, "
-        "because the crossover is driven by watchtower exhaustion economics "
+        "because the crossover is driven by per-UTXO recovery-cost scaling economics "
         "(splits_to_exhaust = vault_amount / (recover_vsize × fee_rate)), "
         "which uses only measured CCV/OP_VAULT vsizes."
     )

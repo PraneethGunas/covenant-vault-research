@@ -1,3 +1,12 @@
+"""FRAMING TAGS (conference/AXES.md canonical reference)
+    Class: Axis A2+A6 edge measurement (not an attack class)
+    Enabling axis-value: A2, A6
+    Susceptible covenants: N/A
+    Immune covenants: N/A
+    Notes: Measures batched-trigger and multi-input edge cases feeding into Z3 ordering-flip analysis.
+    (Full Rationality-and-Scope block: Thesis Appendix D; FC Appendix B.2.)
+"""
+
 """Experiment E: Multi-Input Batching
 
 Tests batched trigger capabilities — spending multiple vault UTXOs in a

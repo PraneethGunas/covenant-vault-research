@@ -1,3 +1,12 @@
+"""FRAMING TAGS (conference/AXES.md canonical reference)
+    Class: Z1 (Fee-Channel Pinning)
+    Enabling axis-value: A3=out-of-band-anchor
+    Susceptible covenants: CTV
+    Immune covenants: CCV, OP_VAULT, CAT+CSFS (A3=dynamic; no separate anchor handle)
+    Notes: Counter-factual: TRUC/BIP-431 collapses the descendant limit to 1, eliminating the class at the relay-policy level. Cluster mempool is a scope-limit.
+    (Full Rationality-and-Scope block: Thesis Appendix D; FC Appendix B.2.)
+"""
+
 """Experiment C: Fee Management and Pinning Resistance
 
 Compares how each vault design handles transaction fees and resistance

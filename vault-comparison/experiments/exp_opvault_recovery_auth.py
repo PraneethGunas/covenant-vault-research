@@ -1,3 +1,12 @@
+"""FRAMING TAGS (conference/AXES.md canonical reference)
+    Class: Z2 (Permissionless Griefing) -- OP_VAULT immunity demonstration
+    Enabling axis-value: A1=recoveryauth-key
+    Susceptible covenants: CCV (A1=keyless)
+    Immune covenants: OP_VAULT (this experiment: authorised recovery via recoveryauth Schnorr signature)
+    Notes: Demonstrates the counter-factual for class Z2: requiring a signature on the recovery leaf eliminates the class by forcing key-gated recovery.
+    (Full Rationality-and-Scope block: Thesis Appendix D; FC Appendix B.2.)
+"""
+
 """Experiment K: OP_VAULT Authorized Recovery Analysis
 
 Demonstrates authorized recovery as both a DEFENSE (anti-griefing) and

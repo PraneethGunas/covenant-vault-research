@@ -1,3 +1,12 @@
+"""FRAMING TAGS (conference/AXES.md canonical reference)
+    Class: Z4 (Hot-Key Theft via Destination Substitution) -- OP_VAULT susceptibility
+    Enabling axis-value: A4=dedicated-opcode (OP_VAULT withdraw binding)
+    Susceptible covenants: OP_VAULT (hot-key compromise enables destination substitution during CSV)
+    Immune covenants: CAT+CSFS (A4=signature-dual-bind)
+    Notes: OP_VAULT's dedicated opcode binds the withdrawal template but not the signature; a hot-key attacker can race the watchtower during CSV.
+    (Full Rationality-and-Scope block: Thesis Appendix D; FC Appendix B.2.)
+"""
+
 """Experiment L: OP_VAULT Trigger Key Theft — Structural Differentiators
 
 Analyzes trigger key compromise as it applies specifically to OP_VAULT,

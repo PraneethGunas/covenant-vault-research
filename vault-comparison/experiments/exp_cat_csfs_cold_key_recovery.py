@@ -1,3 +1,12 @@
+"""FRAMING TAGS (conference/AXES.md canonical reference)
+    Class: Z5 (Cold-Key Theft via Unconstrained Recovery) -- CAT+CSFS susceptibility demonstration
+    Enabling axis-value: A5=plain-signature (CAT+CSFS recovery leaf)
+    Susceptible covenants: CAT+CSFS (A5=plain-signature; bare cold_pk OP_CHECKSIG)
+    Immune covenants: CTV (A5=template-hash-digest), CCV (A5=per-output-amount+script), OP_VAULT (A5=dedicated-opcode)
+    Notes: This is the direct tradeoff for CAT+CSFS's hot-key-theft immunity: strongest A4 paired with weakest A5. Poelstra's sketch describes a CAT+CSFS-based bound-recovery construction that would eliminate the class.
+    (Full Rationality-and-Scope block: Thesis Appendix D; FC Appendix B.2.)
+"""
+
 """Experiment: CAT+CSFS Cold Key Recovery — No-Covenant Recovery Path
 
 Analyzes the security properties and attack surface of the CAT+CSFS

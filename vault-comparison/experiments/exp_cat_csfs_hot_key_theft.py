@@ -1,3 +1,12 @@
+"""FRAMING TAGS (conference/AXES.md canonical reference)
+    Class: Z4 (Hot-Key Theft via Destination Substitution) -- CAT+CSFS immunity demonstration
+    Enabling axis-value: A4=signature-dual-bind (CAT+CSFS) is the immune position
+    Susceptible covenants: CTV, CCV, OP_VAULT (A4 != signature-dual-bind)
+    Immune covenants: CAT+CSFS (Schnorr EUF-CMA forces output-binding)
+    Notes: Soundness reduces to Schnorr's EUF-CMA under the fixed-public-key model (Nick-Ruffing-Seurin, NRS20/MuSig2). A valid signature over two distinct messages under the same key would solve discrete-log.
+    (Full Rationality-and-Scope block: Thesis Appendix D; FC Appendix B.2.)
+"""
+
 """Experiment: CAT+CSFS Hot Key Theft — Output Redirection Attempt
 
 Tests whether a compromised hot key can redirect vault funds to an

@@ -1,3 +1,12 @@
+"""FRAMING TAGS (conference/AXES.md canonical reference)
+    Class: Z2 (Permissionless Griefing)
+    Enabling axis-value: A1=keyless (for CCV)
+    Susceptible covenants: CCV (keyless recovery)
+    Immune covenants: OP_VAULT (A1=recoveryauth-key), CTV (A1=hot-key), CAT+CSFS (A1=cold-key)
+    Notes: CCV's keyless recovery admits griefing by any observer; OPV's authorised recovery is the design counterfactual.
+    (Full Rationality-and-Scope block: Thesis Appendix D; FC Appendix B.2.)
+"""
+
 """Experiment F: Forced-Recovery Griefing
 
 Demonstrates the asymmetric cost of forced-recovery griefing attacks

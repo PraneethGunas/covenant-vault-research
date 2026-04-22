@@ -1,3 +1,12 @@
+"""FRAMING TAGS (conference/AXES.md canonical reference)
+    Class: Z6 (Mode/Parameter Bypass)
+    Enabling axis-value: A6=multi-mode-with-OP_SUCCESS
+    Susceptible covenants: CCV (BIP-443 modes outside {-1,0,1,2} trigger OP_SUCCESSx)
+    Immune covenants: CTV, OP_VAULT, CAT+CSFS (A6=single-mode)
+    Notes: This is SPECIFIED BEHAVIOR under BIP-443's forward-compatibility design (itself inherited from BIP-341/342 OP_SUCCESSx semantics), not a novel vulnerability. Novelty = systematic mode sweep + class-level framing.
+    (Full Rationality-and-Scope block: Thesis Appendix D; FC Appendix B.2.)
+"""
+
 """Experiment: CCV Mode Bypass — Developer Footgun on Production-Shaped Vault
 
 Verifies BIP-443 OP_SUCCESS behavior on a production-shaped vault.

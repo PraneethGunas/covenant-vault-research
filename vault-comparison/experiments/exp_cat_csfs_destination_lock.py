@@ -1,3 +1,12 @@
+"""FRAMING TAGS (conference/AXES.md canonical reference)
+    Class: Z4 immunity-side demonstration (dual-verification proof)
+    Enabling axis-value: A4=signature-dual-bind
+    Susceptible covenants: N/A -- immunity demonstration
+    Immune covenants: CAT+CSFS (dual verification forces hashOutputs binding)
+    Notes: Companion to exp_cat_csfs_hot_key_theft.py; tests the positive direction (destination is locked at the cryptographic layer).
+    (Full Rationality-and-Scope block: Thesis Appendix D; FC Appendix B.2.)
+"""
+
 """Experiment: CAT+CSFS Destination Lock — Inflexible Withdrawal Target
 
 Analyzes the CAT+CSFS vault's unique property: the withdrawal destination

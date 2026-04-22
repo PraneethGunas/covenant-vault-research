@@ -1,4 +1,13 @@
-"""Experiment H: Watchtower Exhaustion via Revault Splitting
+"""FRAMING TAGS (conference/AXES.md canonical reference)
+    Class: Z3 (Per-UTXO Recovery-Cost Scaling)
+    Enabling axis-value: A2=revault-yes, A3=dynamic (when susceptible)
+    Susceptible covenants: CCV, OP_VAULT
+    Immune covenants: CTV, CAT+CSFS (A2=no; partial withdrawal not expressible)
+    Notes: This experiment measures the structural cost tail of partial withdrawal. The multi-round attacker narrative in the earlier framing is one threat-model instantiation; the reframe in FRAMING-CHANGES item 4 centres the finding on per-UTXO recovery-cost scaling and the batched-defender ordering flip. File name preserved for git history; conceptually this is the class-Z3 experiment.
+    (Full Rationality-and-Scope block: Thesis Appendix D; FC Appendix B.2.)
+"""
+
+"""Experiment H: Per-UTXO Recovery-Cost Scaling via Revault Splitting
 
 Demonstrates the revault splitting attack originating with halseth in
 the OP_VAULT discussion (BIP-345, https://bips.dev/345/), with

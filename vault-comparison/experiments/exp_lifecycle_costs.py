@@ -1,3 +1,12 @@
+"""FRAMING TAGS (conference/AXES.md canonical reference)
+    Class: Axis measurement (not an attack class)
+    Enabling axis-value: A3, A4, A5 consequences on transaction vsize
+    Susceptible covenants: N/A
+    Immune covenants: N/A
+    Notes: Baseline lifecycle vsize measurements. Foundation for all class cost-function computations.
+    (Full Rationality-and-Scope block: Thesis Appendix D; FC Appendix B.2.)
+"""
+
 """Experiment A: Vault Lifecycle Transaction Costs
 
 Measures the on-chain cost of the complete vault lifecycle for each

@@ -1,3 +1,12 @@
+"""FRAMING TAGS (conference/AXES.md canonical reference)
+    Class: Adjacent to Z4 (cryptographic verification)
+    Enabling axis-value: A4=signature-dual-bind (SHA-256 collision-resistance of sighash message)
+    Susceptible covenants: N/A
+    Immune covenants: CAT+CSFS
+    Notes: Tests witness-field tampering rejection. Cryptographic verification, not an attack class per se. Would break if SHA-256 collision-resistance broke.
+    (Full Rationality-and-Scope block: Thesis Appendix D; FC Appendix B.2.)
+"""
+
 """Experiment: CAT+CSFS Witness Manipulation — Preimage Forgery Resistance
 
 Tests whether an attacker can manipulate the witness-provided prefix or

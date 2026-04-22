@@ -1,3 +1,12 @@
+"""FRAMING TAGS (conference/AXES.md canonical reference)
+    Class: Z3 (Per-UTXO Recovery-Cost Scaling) -- mechanism demonstration
+    Enabling axis-value: A2=revault-yes
+    Susceptible covenants: CCV, OP_VAULT
+    Immune covenants: CTV, CAT+CSFS (A2=no)
+    Notes: Demonstrates the revault chain that produces the structural cost tail. Cross-reference: exp_watchtower_exhaustion.py measures the fee-rate-dependent consequence.
+    (Full Rationality-and-Scope block: Thesis Appendix D; FC Appendix B.2.)
+"""
+
 """Experiment D: Revault Amplification
 
 Tests partial-withdrawal (revault) capabilities and measures amplification
