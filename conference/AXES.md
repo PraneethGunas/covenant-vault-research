@@ -178,7 +178,28 @@ Simplicity on Elements is:
   - Thesis as Appendix C ("Simplicity on Elements: The Unoccupied Optimal Corner").
   - Future-work references in both documents.
 
-Canonical one-sentence claim (use verbatim or near-verbatim): *"Simplicity's atomic-vault program occupies the strict-best position on A1, A2, A4, A5, A7 simultaneously; no Bitcoin proposal does. This demonstrates the dominant corner is occupiable; the gap identified in §3 is about the unoccupied status among current Bitcoin proposals, not about theoretical impossibility."*
+### Canonical claim
+
+Use verbatim or near-verbatim:
+
+> *"Our Simplicity vault on Elements supports per-output binding on both trigger and recovery paths, atomic or bounded partial withdrawal, cold-key recovery with an optional keyless post-timeout sweep, and MAX_FEE-capped in-value fee deduction. In the atomic configuration with cold-key-only recovery, it occupies a strict-best position on A1, A2, A4, A5, A7 simultaneously in the axis lattice of §\ref{sec:imposs:design_space}. Measurements reported are for the atomic configuration."*
+
+### Axis-tuple coverage
+
+The implementation covers the following axis positions:
+
+- **A1 (recovery authorisation).** `cold-key`, with an optional `cold-key | keyless-after-timeout` construction.
+- **A2 (revault).** Either `no` (atomic withdrawal), or `yes` with a covenant-enforced residual floor that structurally bounds UTXO count.
+- **A3 (fee-inclusion).** `dynamic` — MAX_FEE cap on in-value deduction; signer picks the fee at broadcast.
+- **A4 (withdrawal binding).** `dedicated-jets-combinator` — per-output via `jet::output_script_hash(0)` and `jet::output_amount(0)`.
+- **A5 (recovery binding).** `dedicated-jets-combinator` — same jets.
+- **A6 (opcode surface).** `single-mode`.
+- **A7 (introspection primitive).** `typed-combinator-introspection`.
+
+### Phrasing notes
+
+- Prefer "a Simplicity vault" or "our Simplicity implementation" over the singular-definite "the Simplicity vault" in new content.
+- When a claim is specifically about strict-best immunity across classes Z1–Z6, scope it to "the atomic configuration" (or equivalent); the bounded-partial construction opens a bounded exposure to class Z3, and the keyless-post-timeout construction introduces a class Z2 / Z11 timing trade-off.
 
 ---
 

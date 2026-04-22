@@ -13,7 +13,7 @@ This framework exists to produce reproducible, quantitative comparisons between 
 
 The goal is to separate design-level tradeoffs from implementation-level bugs, and to measure concrete costs (vsize, fees, key requirements, attack surfaces) rather than relying on qualitative comparisons alone.
 
-**Simplicity vault: separate measurement, not direct comparison.** The project includes a fifth vault implementation (`simple-simplicity-vault`) built with the Simplicity language on Elements regtest. We measure its lifecycle costs and document its architecture, but present it separately from the four-way Bitcoin comparison for three reasons: (1) Simplicity runs on Elements/Liquid, a federated sidechain with different block weight limits, fee relay policy, and transaction serialization — making direct vsize comparisons with Bitcoin Core covenants misleading; (2) the Simplicity vault's jet-based execution model (`jet::outputs_hash()` for covenants, `jet::check_lock_distance()` for timelocks) has no analog in Bitcoin Script, so threat model mappings (fee pinning, descendant limits, mempool policy) do not transfer; (3) Elements' federation introduces trust assumptions absent from Bitcoin. The Simplicity vault serves as a reference point — what covenant design looks like with full transaction introspection and no soft-fork dependency — rather than a direct competitor to the Bitcoin proposals. Lifecycle measurements are in §4.4.
+**Simplicity vault: separate measurement, not direct comparison.** The project includes a fifth vault implementation (`simple-simplicity-vault`) built with the Simplicity language on Elements regtest. We measure its lifecycle costs and document its architecture, but present it separately from the four-way Bitcoin comparison for three reasons: (1) Simplicity runs on Elements/Liquid, a federated sidechain with different block weight limits, fee relay policy, and transaction serialization — making direct vsize comparisons with Bitcoin Core covenants misleading; (2) the Simplicity vault's jet-based execution model (per-output binding jets for covenants, `jet::check_lock_distance()` for timelocks) has no analog in Bitcoin Script, so threat model mappings (fee pinning, descendant limits, mempool policy) do not transfer; (3) Elements' federation introduces trust assumptions absent from Bitcoin. The Simplicity vault serves as a reference point — what covenant design looks like with full transaction introspection and no soft-fork dependency — rather than a direct competitor to the Bitcoin proposals. Lifecycle measurements are in §4.4.
 
 **Scope exclusion: Ark, BitVM, and protocol-layer constructs.** Ark uses a virtual UTXO model with an operator-mediated coordination layer — it is a *protocol* built atop Bitcoin, not an opcode-level covenant. BitVM uses fraud proofs and off-chain computation verification rather than on-chain covenant enforcement. Both are architecturally distinct from the opcode-level covenant primitives (CTV, CCV, OP_VAULT, CAT+CSFS) compared here. Including them would require modeling protocol-layer trust assumptions and interactive communication rounds that have no analog in our single-transaction covenant framework.
 
@@ -42,7 +42,7 @@ The conceptual contribution is a *unified measurement framework* that reveals ho
 4. **Empirical confirmation of prior estimates and first complete vsize measurements.** Harding's [Har24] ~3,000 chunks/block estimate is confirmed for OP_VAULT (measured: 3,427 splits/block at trigger_and_revault weight ~1,168 WU). For CCV, the smaller trigger_and_revault transaction (162 vB vs OP_VAULT's 292 vB) yields approximately 6,172 splits/block — roughly 80% more than OP_VAULT, because Harding's analysis assumed OP_VAULT-sized transactions. This work provides the first empirically measured vsize data for all four covenant lifecycles — no prior work or BIP specification published concrete transaction size figures.
 5. **CCV OP_SUCCESS bypass: developer footgun documentation via OP_SUCCESS (TM8).** The OP_SUCCESS behavior for undefined CCV mode values is **specified consensus behavior** in BIP-443, deliberately designed for forward-compatible soft-fork extensions. Ingala [Ing23] documented this as a design decision. No vault developer using the pymatt library would accidentally trigger this — the library exposes named constants that prevent misuse. Our contribution is (a) the `CCV OP_SUCCESS bypass` transition model documenting the *consequence* of the footgun — a vault UTXO consumed with zero typed outputs, funds redirected to attacker-controlled UTXOs; (b) systematic mode sweep confirming all undefined values (3, 4, 7, 128, 255) produce complete covenant bypass on a production-shaped taptree; (c) developer education: the boundary between defined and undefined modes is at the enumeration edge ({-1,0,1,2} are defined; all others trigger OP_SUCCESS), not at a bitmask boundary. **Verified via `exp_ccv_mode_bypass` on CCV regtest (2026-02-22).** All 5 undefined modes confirmed: covenant bypass on each, 110 vB per spend.
 
-6. **Two original vault implementations.** The CAT+CSFS vault and the Simplicity vault are original implementations built for this research, not forks of existing code. The CAT+CSFS vault is the first working vault that uses dual Schnorr verification (OP\_CHECKSIGFROMSTACK + OP\_CHECKSIG) for covenant enforcement on Bitcoin Inquisition regtest. The Simplicity vault is built with the Simplicity language on Elements regtest via the Simplex SDK, using `jet::outputs_hash()` for covenant enforcement — the first Simplicity-based vault with measured lifecycle costs. Both implementations are open-source.
+6. **Two original vault implementations.** The CAT+CSFS vault and the Simplicity vault are original implementations built for this research, not forks of existing code. The CAT+CSFS vault is the first working vault that uses dual Schnorr verification (OP\_CHECKSIGFROMSTACK + OP\_CHECKSIG) for covenant enforcement on Bitcoin Inquisition regtest. The Simplicity vault is built with the Simplicity language on Elements regtest via the Simplex SDK, using per-output binding jets (`jet::output_script_hash(0)` + `jet::output_amount(0)`) for covenant enforcement — the first Simplicity-based vault with measured lifecycle costs. Both implementations are open-source.
 
 The per-experiment relationship to prior work is detailed in `REFERENCES.md` §2.
 
@@ -200,20 +200,14 @@ The vault uses two Taproot addresses, each with a 2-leaf taptree on a NUMS inter
 
 Simplicity is a typed functional language designed by Russell O'Connor [OC17] for blockchain consensus scripts. Unlike Bitcoin Script's stack-based imperative model, Simplicity programs are directed acyclic graphs (DAGs) of combinators with formal denotational semantics and a Coq-verified type system. The language runs on Elements/Liquid, Blockstream's federated sidechain.
 
-**Jets** are the execution mechanism. Every Simplicity combinator expression has a canonical Merkle root. When validators encounter a known subtree (e.g., SHA-256, BIP-340 Schnorr verification), they execute a native C implementation — the "jet" — instead of interpreting the combinators. Jets for transaction introspection (`jet::outputs_hash()`, `jet::sig_all_hash()`), timelocks (`jet::check_lock_distance()`), and cryptographic primitives (`jet::bip_0340_verify()`) are the building blocks for covenant enforcement.
+**Jets** are the execution mechanism. Every Simplicity combinator expression has a canonical Merkle root. When validators encounter a known subtree (e.g., SHA-256, BIP-340 Schnorr verification), they execute a native C implementation — the "jet" — instead of interpreting the combinators. Jets for transaction introspection (`jet::output_script_hash(0)`, `jet::output_amount(0)`, `jet::sig_all_hash()`), timelocks (`jet::check_lock_distance()`), and cryptographic primitives (`jet::bip_0340_verify()`) are the building blocks for covenant enforcement.
 
-**Covenant enforcement via `jet::outputs_hash()`:** The Simplicity VM computes a Merkle hash over the spending transaction's outputs using four category-specific sub-hashes:
+**Covenant enforcement via per-output jets.** The vault binds the destination output with two jets:
 
-```
-outputs_hash = SHA256(
-    SHA256(asset₀||value₀ || asset₁||value₁ || ...)   // assetAmountsHash
- || SHA256(nonce₀ || nonce₁ || ...)                    // noncesHash
- || SHA256(SHA256(spk₀) || SHA256(spk₁) || ...)       // scriptsHash
- || SHA256(SHA256(rp₀) || SHA256(rp₁) || ...)         // rangeProofsHash
-)
-```
+- `jet::output_script_hash(0)` — commits to the scriptPubKey of output index 0.
+- `jet::output_amount(0)` — commits to the asset+value of output index 0.
 
-A covenant program embeds the expected `outputs_hash` as a compile-time parameter. At spend time, `jet::outputs_hash()` computes the hash from the actual transaction outputs. If the two values differ, the program fails — the transaction is invalid at the consensus level. This is structurally similar to CTV's template hash but operates over Elements' richer output model (multi-asset, confidential values, explicit nonces).
+Each spend path (trigger, withdraw, recover) compares the jet results against values baked into the program at compile time. If either differs, the program fails and the transaction is invalid at the consensus level. Per-output binding (rather than a whole-tuple digest) keeps the destination check compositional and lets the same pattern carry bounded partial withdrawal without reshaping the covenant.
 
 **Simplicity vault lifecycle** (`simple-simplicity-vault`):
 
@@ -225,32 +219,32 @@ Funded UTXO (Elements wallet)
 Vault UTXO (P2TR: trigger program + recover program)
     │                          \
     │ trigger_tx                recover_tx → recovery address
-    │ (hot key, outputs_hash)  (cold key, outputs_hash)
+    │ (hot key, per-output binding)  (cold key, per-output binding)
     ▼
 Unvault UTXO (P2TR: withdraw program + recover program)
     │                          \
     │ withdraw_tx               recover_tx → recovery address
-    │ (hot key, CSV +           (cold key, outputs_hash)
-    │  outputs_hash)
+    │ (hot key, CSV +           (cold key, per-output binding)
+    │  per-output binding)
     ▼
 Destination address
 ```
 
-Both taptree addresses (vault and unvault) use a NUMS internal key with two Simplicity program leaves. The hot key signs trigger and withdraw; the cold key signs recovery. Each spend path enforces `jet::outputs_hash()` — including recovery, making Simplicity's recovery output-constrained (unlike CAT+CSFS's unconstrained `OP_CHECKSIG`).
+Both taptree addresses (vault and unvault) use a NUMS internal key with two Simplicity program leaves. The hot key signs trigger and withdraw; the cold key signs recovery. Every spend path binds output 0 via `jet::output_script_hash(0)` and `jet::output_amount(0)`, including recovery.
 
-**Simplicity-specific properties:**
+**Simplicity vault capabilities:**
 
-1. **Output-constrained recovery** — Both trigger and recover paths enforce `jet::outputs_hash()`. The cold key can only recover to the pre-committed recovery address. This is structurally equivalent to CCV's output-constrained recovery and stronger than CAT+CSFS's unconstrained recovery.
-2. **Explicit fee output** — Elements transactions use an explicit fee output (empty scriptPubKey) instead of Bitcoin's implicit fee (input sum minus output sum). This eliminates fee pinning via anchor outputs — there are no descendant-spendable fee outputs to pin.
-3. **Two-key model** — Separate BIP-39 mnemonics for hot and cold keys, producing distinct Schnorr keypairs embedded as compile-time parameters (`param::HOT_PK`, `param::COLD_PK`) in the Simplicity programs.
-4. **CSV via `jet::check_lock_distance()`** — The withdraw path enforces a relative timelock, functionally equivalent to `OP_CSV` in Bitcoin Script.
-5. **No recursive covenants** — The current implementation does not chain `outputs_hash` commitments recursively. No revault or partial withdrawal.
+1. **Per-output binding.** Trigger, withdraw, and recovery each commit to the scriptPubKey and asset+value of output 0 via the jets described above.
+2. **Atomic or bounded partial withdrawal.** A spend can withdraw the full amount, or a partial amount while leaving a residual output bound by a compile-time `RESIDUAL_FLOOR` covenant that structurally caps the UTXO count.
+3. **Cold-key recovery with optional keyless post-timeout sweep.** The recovery path is gated by the cold key. An optional construction also exposes a keyless sweep to a pre-committed heir address after `jet::check_lock_height()` passes.
+4. **MAX_FEE-capped in-value fees.** Fees are deducted from the vault amount and capped at a compile-time `MAX_FEE` ceiling. The signer chooses the actual fee at broadcast. Elements carries an explicit fee output, so there is no CPFP anchor surface.
+5. **Two-key model.** Separate BIP-39 mnemonics for hot and cold keys, producing distinct Schnorr keypairs embedded as compile-time parameters (`param::HOT_PK`, `param::COLD_PK`) in the Simplicity programs.
+6. **CSV via `jet::check_lock_distance()`.** The withdraw path enforces a relative timelock, functionally equivalent to `OP_CSV` in Bitcoin Script.
+7. **Typed combinator introspection.** All checks are Coq-specified jets; witness validity is typed, not digest-matched.
 
-**Simplicity-specific limitations:**
+**Measurement scope.** The 865 vB lifecycle reported in §4.4 is for the atomic configuration with cold-key-only recovery. The bounded-partial and keyless-post-timeout constructions have integration tests only; their lifecycle vsizes have not yet been measured.
 
-1. **Federation trust model** — Elements/Liquid is a federated sidechain. The security of the vault is bounded by the federation's honesty, which has no analog in Bitcoin's proof-of-work consensus. This confounds direct security comparisons with Bitcoin covenant vaults.
-2. **No revault or batching** — The vault is a single-hop design (trigger → withdraw), like CTV and CAT+CSFS. Simplicity's expressiveness could support recursive vaults, but the current implementation does not.
-3. **Larger witnesses** — The Simplicity witness encodes a pruned DAG in a bit-oriented format (combinators, jet references, Merkle proofs). This produces larger transactions (298 vB trigger/withdraw) than Bitcoin Script equivalents, reflecting the tradeoff between expressiveness and witness size.
+**Substrate note.** Elements/Liquid is a federated sidechain. The vault's on-chain security is bounded by the federation's honesty, which has no analog in Bitcoin's proof-of-work consensus.
 
 ## 3. Architecture
 
@@ -598,18 +592,23 @@ This matrix synthesizes the per-experiment threat models into a four-way compari
 
 **Simplicity mapping** (not included in the matrix columns — separate chain, separate threat model):
 The Simplicity vault runs on Elements/Liquid, a federated sidechain where block production is controlled by known functionaries. This fundamentally changes the threat model: functionaries could censor attacker transactions (making griefing, fee pinning, and per-UTXO recovery-cost scaling moot) or collude with an attacker (making all covenant enforcement irrelevant). The mappings below assume honest federation behavior and evaluate only covenant-level properties:
-The Simplicity vault on Elements maps to the following TM entries:
-- TM1 (fee pinning): **N/A** — explicit fee outputs, no anchor outputs, no descendant-chain pinning vector.
-- TM2 (recovery griefing): **LOW** — cold key required for recovery (like CAT+CSFS), but recovery is output-constrained (unlike CAT+CSFS). Cost: ~286 vB/round.
-- TM3 (trigger key theft): **LOW** — hot key can only trigger to pre-committed unvault output (`outputs_hash` enforcement). Cannot redirect funds. Grief only (like CAT+CSFS).
-- TM4 (per-UTXO recovery-cost scaling): **N/A** — no revault capability, single unvault of full amount (like CTV/CAT+CSFS).
-- TM5 (trigger key theft/xpub): **N/A** — single Schnorr hot key, not xpub-derived.
-- TM6 (dual-key compromise): **HOT+COLD → total theft**, but recovery is output-constrained, so cold key alone cannot sweep to arbitrary address. Both keys needed for unrestricted theft.
-- TM7 (address reuse): **SAFE** — each vault creation produces a fresh plan with new addresses. Multiple deposits to the same address create independent UTXOs.
-- TM8 (CCV mode bypass): **N/A** — no CCV opcode; Simplicity programs are type-checked at compile time.
-- TM9 (hot key output redirection): **IMPOSSIBLE** — `jet::outputs_hash()` constrains all outputs. Hot key can only trigger to pre-committed unvault.
-- TM10 (witness tampering): **IMPOSSIBLE** — Simplicity programs are Merkle-verified DAGs with formal type checking. Witness manipulation fails at program evaluation.
-- TM11 (cold key compromise): **MODERATE** — unlike CAT+CSFS, the recover path enforces `outputs_hash()`. Cold key can only recover to the pre-committed recovery address. Not total theft — attacker forces recovery but cannot redirect funds.
+Threat coverage for a Simplicity vault on Elements (atomic configuration unless noted; bounded partial withdrawal and keyless post-timeout sweep are flagged where they change the cell):
+
+| Threat | Simplicity | Notes |
+|---|---|---|
+| TM1 fee pinning | N/A (substrate) | Elements explicit fee outputs; no CPFP anchor. |
+| TM2 recovery griefing | covered | Cold key required for recovery; recovery output is bound via `jet::output_script_hash(0)`. Cost ≈ 286 vB/round. If the keyless post-timeout sweep is configured, the griefing surface widens to anyone able to broadcast after the timeout. |
+| TM3 timelock race | covered | Hot key can only trigger to the pre-committed unvault output; CSV via `jet::check_lock_distance()` gates withdraw. |
+| TM4 / Z3 per-UTXO scaling | atomic: covered; bounded-partial: bounded | Atomic withdrawal leaves no UTXO fan-out. The bounded-partial construction enforces a compile-time `RESIDUAL_FLOOR` covenant that structurally caps UTXO count. |
+| TM5 trigger-xpub theft | covered | Single Schnorr hot key, not xpub-derived. |
+| TM6 dual-key compromise | out of scope | Kerckhoffs: both-key compromise is out of scope for the axis analysis. If both keys are lost the recovery output is still bound, so the attacker can force recovery but cannot redirect. |
+| TM7 address reuse | covered | Each vault creation produces a fresh plan with new addresses. Multiple deposits to the same address create independent UTXOs. |
+| TM8 CCV mode bypass | N/A (design) | No CCV opcode; single-mode on A6. |
+| TM9 hot-key output redirection | covered | Per-output binding prevents redirection on the trigger path. |
+| TM10 witness tampering | covered | Simplicity programs are Merkle-verified DAGs with typed witness validation. |
+| TM11 cold-key compromise | covered (forced recovery) | Recovery output is bound; cold-key compromise forces recovery to the pre-committed address, not an arbitrary one. If the keyless post-timeout sweep is configured, cold-key compromise becomes moot after the timeout but introduces a heir-timing trade-off. |
+
+The mapping records, for a Simplicity vault on Elements, which threat models are structurally addressed, which are not applicable and for what reason, and which are addressed with a trade-off.
 
 **Key:**
 - *Attacker cost* = vsize × fee_rate (structural; fee_rate is exogenous).
@@ -748,7 +747,7 @@ Z3  Recovery-cost scaling     N/A (no revault — single    SEVERE — splitting
 | CAT+CSFS   | Low         | Highest            | Low (unconstrained)| Moderate   | Bitcoin  |
 | Simplicity | Low         | Highest            | High (constrained) | Moderate   | Elements |
 
-CTV's "conditional" hot-key safety depends on relay policy (TRUC/v3 would eliminate TM1). CCV's "moderate" reflects keyless griefing (TM2/TM4) and the OP_SUCCESS risk from undefined modes (TM8). OP_VAULT's "high complexity" reflects three-key management and recoveryauth key-loss risk. CAT+CSFS's "highest" hot-key safety reflects the dual-verification binding (TM9), but its "low" cold-key safety reflects unconstrained recovery (TM11). Simplicity matches CAT+CSFS on hot-key safety (`outputs_hash` enforcement) but has "high" cold-key safety because recovery is output-constrained — the key distinction from CAT+CSFS. Simplicity's "moderate" complexity reflects the two-key model (simpler than OP_VAULT's three keys) but on a federated sidechain with different trust assumptions.
+CTV's "conditional" hot-key safety depends on relay policy (TRUC/v3 would eliminate TM1). CCV's "moderate" reflects keyless griefing (TM2/TM4) and the OP_SUCCESS risk from undefined modes (TM8). OP_VAULT's "high complexity" reflects three-key management and recoveryauth key-loss risk. CAT+CSFS's "highest" hot-key safety reflects the dual-verification binding (TM9), but its "low" cold-key safety reflects unconstrained recovery (TM11). Simplicity matches CAT+CSFS on hot-key safety (per-output binding) but has "high" cold-key safety because recovery is output-constrained — the key distinction from CAT+CSFS. Simplicity's "moderate" complexity reflects the two-key model (simpler than OP_VAULT's three keys) but on a federated sidechain with different trust assumptions.
 
 **Threats not modeled.** The following threat classes apply equally to all vault designs and are orthogonal to the covenant-specific properties measured in TM1–TM11:
 
@@ -876,11 +875,11 @@ Wraps `simple-simplicity-vault/target/release/vault-cli` — a Rust CLI built wi
 - `create_vault` → `vault-cli vault --amount <sats> --delay <blocks>` (funds via Elements RPC, prints TXID to stdout)
 - `trigger_unvault` → `vault-cli trigger <txid>` (hot key Schnorr signature via `jet::bip_0340_verify`)
 - `complete_withdrawal` → `vault-cli withdraw <txid>` (hot key + CSV via `jet::check_lock_distance`)
-- `recover` → `vault-cli recover <txid>` (cold key, output-constrained via `jet::outputs_hash`)
+- `recover` → `vault-cli recover <txid>` (cold key, output-constrained via per-output binding)
 
 Does not support: revault, batched trigger, keyless recovery.
 
-Supports: output-constrained recovery (both trigger and recover paths enforce `jet::outputs_hash()` — structurally stronger than CAT+CSFS unconstrained recovery).
+Supports: output-constrained recovery (both trigger and recover paths enforce per-output binding via `jet::output_script_hash(0)` + `jet::output_amount(0)` — structurally stronger than CAT+CSFS unconstrained recovery).
 
 Requires: `simplex regtest` running (`switch-node.sh elements`). The adapter auto-discovers the RPC and Esplora ports from the running elementsd/electrs process arguments — no fixed port assumptions.
 
