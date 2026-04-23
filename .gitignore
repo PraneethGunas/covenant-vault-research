@@ -63,3 +63,7 @@ Thumbs.db
 # === Thesis / presentation files ===
 /presentation/
 ~$*
+
+# === Thesis and conference writing (tracked in separate repos) ===
+/Thesis/
+/conference/
