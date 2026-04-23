@@ -819,8 +819,8 @@ is 4{,}000{,}000~WU, yielding:
 Harding~\cite{Har24} estimated approximately 3{,}000 splits per block based on
 assumed OP\_VAULT-sized transactions. Our measurement confirms this for OP\_VAULT
 (3{,}427, within 14\% of the estimate) but reveals that CCV achieves approximately
-80\% more splits per block due to its smaller trigger transaction (162\vB{} vs.\
-292\vB{}). This correction matters because CCV (BIP-443) is the active proposal
+80\% more splits per block due to its smaller \texttt{trigger\_and\_revault}
+transaction (162\vB{} vs.\ \opvault{}'s \texttt{start\_withdrawal} at 292\vB{}). This correction matters because CCV (BIP-443) is the active proposal
 that replaced OP\_VAULT (BIP-345): the design that Bitcoin is most likely to adopt
 has a larger per-UTXO recovery-cost scaling surface than previously estimated.
 
