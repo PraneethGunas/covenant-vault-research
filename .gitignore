@@ -68,3 +68,8 @@ Thumbs.db
 /Thesis/
 /conference/
 /formalization/
+
+# === Local / workflow files ===
+/.mcp.json
+/TODO.md
+/RESEARCH-LOG.md
