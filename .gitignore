@@ -43,14 +43,6 @@ Thumbs.db
 .vscode/
 
 
-/formalization/alloy/solutions/
-/formalization/covenant-vault-paper.*
-/formalization/llncs.cls
-/formalization/splncs04.bst
-/formalization/ATTACK-SPEC.md
-/formalization/FORMALIZATION-GUIDE.md
-/formalization/alloy/ANALYSIS.md
-
 # === Site (has its own repo) ===
 /site/
 
@@ -71,5 +63,3 @@ Thumbs.db
 
 # === Local / workflow files ===
 /.mcp.json
-/TODO.md
-/RESEARCH-LOG.md
