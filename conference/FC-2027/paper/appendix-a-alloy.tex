@@ -9,9 +9,14 @@ layer (\texttt{btc\_base}), a vault abstraction layer
 (\texttt{vault\_base}), and five concrete covenant models extending
 the abstraction with design-specific transition guards. Two
 cross-cutting modules (\texttt{threat\_model},
-\texttt{cross\_covenant}) are opened by the concrete models. In
-total the corpus contains 42 assertions; all but one pass under the
-configured scopes.
+\texttt{cross\_covenant}) are opened by the concrete models. The
+corpus spans nine \texttt{.als} files with 42 assertions, of which 41
+are invoked by \texttt{check} commands (one assertion,
+\texttt{ccvEventualWithdrawal}, is defined but not checked). Of the
+41 checks, 40 pass under the configured scopes and one
+(\texttt{catcsfsNoExtraction\_ColdKeyOnly}) produces the expected
+counterexample documenting \catcsfs{}'s unconstrained cold-key
+recovery.
 
 \subsection{Module Contents}
 
@@ -37,9 +42,9 @@ commitment; \texttt{ccv\_vault.als} models the mode enumeration and
 \texttt{opvault\_vault.als} models the three-key separation and
 authorised recovery; \texttt{cat\_csfs\_vault.als} models the
 dual-verification binding and the unconstrained recovery leaf;
-\texttt{simplicity\_vault.als} models the
-\texttt{jet::outputs\_hash()} check on both trigger and recovery
-paths.
+\texttt{simplicity\_vault.als} models the per-output binding jets
+(\texttt{jet::output\_script\_hash(0)}, \texttt{jet::output\_amount(0)})
+on both trigger and recovery paths.
 
 \paragraph{\texttt{threat\_model.als}.}
 Attacker profiles parameterised by which keys the attacker
@@ -83,12 +88,15 @@ enforcement, and the no-state-proliferation property. The
 address-reuse scenario finds an instance where a second deposit
 produces an unspendable UTXO, confirming TM7 as structural.
 
-\paragraph{\opccv{}.} Eight assertions pass, including a
+\paragraph{\opccv{}.} Eight assertions are defined; seven are under
+\texttt{check} commands and all seven pass, including a
 mode-confusion containment check (undefined modes trigger
 \texttt{OP\_SUCCESS} but only within the affected leaf; the
-vault's other leaves remain secure). The griefing scenario
-demonstrates that any party may invoke recovery without keys
-(TM2). The splitting scenario exhibits the revault chain that
+vault's other leaves remain secure). The eighth assertion
+(\texttt{ccvEventualWithdrawal}) is defined for reference but not
+exercised by a \texttt{check} under the current scope. The griefing
+scenario demonstrates that any party may invoke recovery without
+keys (TM2). The splitting scenario exhibits the revault chain that
 produces the per-UTXO recovery-cost tail of class \classscale{}
 (TM4).
 

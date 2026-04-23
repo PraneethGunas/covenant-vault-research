@@ -30,11 +30,16 @@ depends on deployment-environment parameters beyond our harness.
 Mainnet-equivalent measurement on Inquisition signet is future work.
 
 \paragraph{Bounded model checking.}
-Alloy's finite-scope analysis (41 assertions across five models)
-provides refutation for broad claims but does not constitute a full
-proof. Mechanised proofs (Coq, Lean) of
-Proposition~\ref{thm:griefing_safety} and of the feature-vulnerability
-implications D1--D4 (Section~\ref{sec:impossibility}) remain open.
+Alloy's finite-scope analysis (42 assertions across nine files:
+five concrete covenant models atop shared \texttt{btc\_base},
+\texttt{vault\_base}, \texttt{threat\_model}, and
+\texttt{cross\_covenant} modules; 41 under \texttt{check} commands,
+40 passing and one expected-to-fail counterexample on
+\texttt{catcsfsNoExtraction\_ColdKeyOnly}) provides refutation for
+broad claims but does not constitute a full proof. Mechanised
+proofs (Coq, Lean) of Proposition~\ref{thm:griefing_safety} and of
+the feature-vulnerability implications D1--D4
+(Section~\ref{sec:impossibility}) remain open.
 
 \paragraph{Unmerged BIPs.}
 BIP-119, BIP-345, BIP-443, BIP-347, and BIP-348 are all under

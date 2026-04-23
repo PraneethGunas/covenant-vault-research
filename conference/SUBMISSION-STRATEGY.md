@@ -48,7 +48,7 @@ What the paper delivers, in order of novelty:
 2. **Proposition (Griefing–Safety Incompatibility).** No vault simultaneously achieves permissionless recovery and griefing resistance. Exhaustive case analysis over boolean \(\mathcal{A}(\emptyset)\).
 3. **Cross-covenant threat matrix.** 11 threat models × 4 Bitcoin covenant designs + Simplicity, with per-cell vsize-quantified severity.
 4. **Empirical measurements.** 15 experiments × 5 covenants on regtest (Bitcoin Inquisition for CTV/CAT+CSFS, Merkleize CCV node, jamesob opvault, Elements for Simplicity).
-5. **Formal models.** 5 Alloy models (41 assertions) covering vault state machines and covenant-specific properties.
+5. **Formal models.** Five concrete Alloy covenant models atop shared base, threat-model, and cross-covenant modules (9 files, 42 assertions; 41 under `check` commands, 40 passing and one expected-to-fail counterexample on `catcsfsNoExtraction_ColdKeyOnly`) covering vault state machines and covenant-specific properties.
 6. **First working CAT+CSFS vault implementation** (contributed upstream; appears in simple-cat-csfs-vault).
 
 **Length budget.** Thesis is 110 pp → condense to:

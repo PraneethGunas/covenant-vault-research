@@ -78,13 +78,27 @@ This holds for all five designs. In OP\_VAULT, recovery requires the
 \texttt{recoveryauth} key---the transition exists but is gated by key possession.
 
 \paragraph{Summary of results.}
-The Alloy Analyzer checked 41 assertions and found satisfying instances for
-25 scenario predicates. Table~\ref{tab:alloy_results} summarizes the results.
+The Alloy corpus contains 42 assertions across nine \texttt{.als}
+files (see Appendix~\ref{app:alloy_details}); 41 are invoked by
+\texttt{check} commands (the assertion \texttt{ccvEventualWithdrawal}
+is defined but not checked under the current scope), and 40 pass.
+The single counterexample is the expected cold-key extraction in
+CAT+CSFS (\texttt{catcsfsNoExtraction\_ColdKeyOnly}), which confirms
+TM11 structurally. The Alloy Analyzer additionally finds satisfying
+instances for 25 scenario predicates. Table~\ref{tab:alloy_results}
+summarises results for the five concrete covenant models and the
+cross-covenant module (35 checks of the 41); the remaining 6 checks
+on shared base and threat-model modules are catalogued in
+Appendix~\ref{app:alloy_details}.
 
 \begin{table}[t]
 \centering
-\caption{Alloy verification results. 34 of 35 safety checks pass; the one
-failure confirms cold key extraction in CAT+CSFS (TM11).}
+\caption{Alloy verification results for the five concrete covenant
+models and the cross-covenant module (35 checks of the 41 total in
+the corpus; the remaining 6 checks on shared base and threat-model
+modules are in Appendix~\ref{app:alloy_details}). Of these 35, 34 pass and
+the one counterexample confirms cold-key extraction in CAT+CSFS
+(TM11).}
 \label{tab:alloy_results}
 \small
 \begin{tabular}{@{}lccp{4.5cm}@{}}

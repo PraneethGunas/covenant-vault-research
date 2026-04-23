@@ -72,7 +72,7 @@ See `WRITING-SCHEDULE.md` for the full day-by-day plan.
 | **Paper type** | Regular paper (15 pp) |
 | **Primary contribution** | Theorem (Fee-Dependent Security Inversion) + Proposition (Griefing-Safety Incompatibility) |
 | **Secondary contribution** | Cross-covenant empirical measurement (5 designs, 15 experiments, regtest) |
-| **Tertiary contribution** | Bounded-model-check formal validation (Alloy, 41 assertions) |
+| **Tertiary contribution** | Bounded-model-check formal validation (Alloy, 9 files, 42 assertions, 41 checks; 40 pass + 1 expected-fail counterexample) |
 | **Intended audience** | FC community — Bitcoin protocol researchers, covenant proposal authors, vault operators |
 | **Pitch sentence** | "No Bitcoin covenant vault design is universally safest; the safety ranking inverts at a fee rate that scales linearly with vault value." |
 

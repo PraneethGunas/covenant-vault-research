@@ -2,7 +2,14 @@
 
 This appendix provides the model architecture, per-module descriptions, and
 detailed per-covenant verification results summarized in
-Chapter~\ref{ch:verification}.
+Chapter~\ref{ch:verification}. The corpus spans nine \texttt{.als}
+files with 42 assertions; 41 are invoked by \texttt{check} commands
+(the assertion \texttt{ccvEventualWithdrawal} is defined but not
+exercised by a \texttt{check} under the current scope). Of the 41
+checks, 40 pass under the configured scopes and one
+(\texttt{catcsfsNoExtraction\_ColdKeyOnly}) produces the expected
+counterexample documenting CAT+CSFS's unconstrained cold-key
+recovery.
 
 % ======================================================================
 \section{Model Architecture}
@@ -74,11 +81,16 @@ field on each vault UTXO. Properties defined at this level (fund conservation,
 recovery liveness) apply uniformly to all concrete models.
 
 \paragraph{Concrete vault models.}
-Each of the five models extends \texttt{vault\_base} with covenant-specific
-transition guards. \texttt{ccv\_vault} models the CCV mode enumeration
-and the OP\_SUCCESS behavior for undefined modes. \texttt{opvault\_vault} models
-the three-key separation and authorized recovery. \texttt{cat\_csfs\_vault} models
-the dual-verification binding and unconstrained recovery leaf.
+Each of the five concrete models extends \texttt{vault\_base} with
+covenant-specific transition guards. \texttt{ctv\_vault} models the
+template-hash commitment. \texttt{ccv\_vault} models the CCV mode
+enumeration and the OP\_SUCCESS behavior for undefined modes.
+\texttt{opvault\_vault} models the three-key separation and
+authorized recovery. \texttt{cat\_csfs\_vault} models the
+dual-verification binding and unconstrained recovery leaf.
+\texttt{simplicity\_vault} models the per-output binding jets
+(\texttt{jet::output\_script\_hash(0)}, \texttt{jet::output\_amount(0)})
+on both trigger and recovery paths.
 
 \paragraph{\texttt{threat\_model.als}.}
 Defines attacker profiles by specifying which keys the attacker controls. Properties
@@ -100,7 +112,7 @@ The address reuse scenario finds an instance where a second deposit creates an
 unspendable UTXO, confirming the structural vulnerability (TM7).
 
 \paragraph{CCV.}
-All seven checks pass, including the mode confusion containment check (undefined
+Eight assertions are defined; seven are under \texttt{check} commands and all seven pass, including the mode confusion containment check (undefined
 modes trigger OP\_SUCCESS but only within the affected leaf---the vault's other
 leaves remain secure). The griefing scenario demonstrates that any party can invoke
 recovery without keys (TM2). The splitting scenario shows the revault chain that

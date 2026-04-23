@@ -44,7 +44,7 @@ Draft:
 
 > **Problem.** Bitcoin covenant proposals — OP_CHECKTEMPLATEVERIFY (BIP-119), OP_VAULT (BIP-345), OP_CHECKCONTRACTVERIFY (BIP-443), and the OP_CAT + OP_CHECKSIGFROMSTACK composition (BIP-347 + BIP-348) — enable self-custody vaults that enforce spending conditions beyond signature checks. Four years of active development have produced a design space of competing opcodes, but no systematic cross-design security comparison has been published.
 >
-> **Approach.** We present the first comparative security analysis of five covenant vault designs (four Bitcoin proposals plus Simplicity on Elements) combining empirical measurement on regtest (15 experiments) with bounded model checking in Alloy (41 assertions).
+> **Approach.** We present the first comparative security analysis of five covenant vault designs (four Bitcoin proposals plus Simplicity on Elements) combining empirical measurement on regtest (15 experiments) with bounded model checking in Alloy (42 assertions across nine files; 41 under `check` commands, 40 passing and one expected-to-fail counterexample).
 >
 > **Results.** We prove two design constraints. First, a Griefing–Safety Incompatibility: no vault simultaneously achieves permissionless recovery and griefing resistance. Second, a Fee-Dependent Security Inversion: no vault is universally safest; the safety ranking inverts at a fee rate \(r^*\) that scales linearly with vault value.
 >
@@ -315,7 +315,7 @@ No new content in conclusion. Just restate.
 
 | # | Type | Content |
 |---|---|---|
-| App A | Alloy | Full 5 models: ctv, ccv, opvault, catcsfs, simplicity; 41 assertions |
+| App A | Alloy | Five concrete covenant models (ctv, ccv, opvault, catcsfs, simplicity) atop shared base/threat-model/cross-covenant modules; 9 files, 42 assertions, 41 checks (40 pass + 1 expected-fail) |
 | App B | Matrix | Full 11×4 threat matrix with severity + measured vsize |
 | App C | Per-exp | Lifecycle, revault amplification, fee sensitivity per covenant |
 
