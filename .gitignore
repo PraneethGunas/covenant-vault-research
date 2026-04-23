@@ -67,3 +67,4 @@ Thumbs.db
 # === Thesis and conference writing (tracked in separate repos) ===
 /Thesis/
 /conference/
+/formalization/
