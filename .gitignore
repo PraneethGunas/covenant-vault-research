@@ -60,6 +60,7 @@ Thumbs.db
 /Thesis/
 /conference/
 /formalization/
+/scripts/
 
 # === Local / workflow files ===
 /.mcp.json
