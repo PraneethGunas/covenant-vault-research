@@ -169,6 +169,49 @@ uv run run.py run lifecycle_costs --covenant ctv --no-switch
 uv run run.py compare results/<timestamp_directory>
 ```
 
+## Variants
+
+The reference vault per opcode sits at one corner of a four-axis design lattice
+(`f` fee model, `a` amount policy, `g` recovery gating, `b` recovery binding).
+Each adapter declares additional **variants** that flip one or more axes; the
+constructible variant set per opcode reaches different points on the lattice,
+including the two non-dominated landmark anchors (MES = key-gated bound atomic;
+post-MES = keyless bound atomic). See [`DESIGN.md`](DESIGN.md) §3.8 for the full
+axis-to-class mapping.
+
+```bash
+# Run lifecycle on a specific variant
+uv run run.py run lifecycle_costs --covenant opvault --variant keyless
+uv run run.py run lifecycle_costs --covenant ccv --variant keygated-atomic
+
+# Sweep every registered variant of one covenant (per-variant chain wipes)
+uv run run.py run lifecycle_costs --covenant opvault --variant all
+
+# Smoke-test all 12 variants across all four covenants
+uv run scripts/test_variants.py
+
+# Run each variant-relevant experiment on every susceptible variant
+# (lifecycle, recovery_griefing, revault_amplification, watchtower_exhaustion,
+#  cat_csfs_cold_key_recovery, cat_csfs_destination_lock) and emit the
+# differential matrix as sweep_matrix.{md,json}
+uv run scripts/sweep_variants.py
+```
+
+Registered variants:
+
+| Opcode | Variants |
+|---|---|
+| CTV       | `ctv`, `ctv-keygated` |
+| CCV       | `ccv`, `ccv-atomic`, `ccv-keygated`, `ccv-keygated-atomic` |
+| OP\_VAULT | `opvault`, `opvault-keyless`, `opvault-atomic`, `opvault-keyless-atomic` |
+| CAT+CSFS  | `cat_csfs`, `cat_csfs-bound` |
+
+Each adapter exposes `attempt_permissionless_recovery(state)`, which builds a
+recovery transaction without the auth key and broadcasts it. The on-chain
+outcome (ACCEPTED on keyless variants, REJECTED at script verification on
+key-gated variants) is the empirical proof of class-Z2 susceptibility/immunity
+per variant.
+
 ## Experiments
 
 The framework includes 15 experiments organized by scope category.
