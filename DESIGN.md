@@ -465,7 +465,10 @@ Experiments dispatch on `adapter.capabilities()` rather than `adapter.name`. The
 - `run.py run <experiment> --covenant <opcode> --variant <id>` — single variant.
 - `scripts/test_variants.py` — smoke-test all registered variants per covenant (lifecycle + recovery flow).
 
-The permissionless-recovery probe (`adapter.attempt_permissionless_recovery(state)`) attempts recovery with a forged wrong-key signature; the on-chain outcome (ACCEPTED / REJECTED) is the empirical proof of the variant's susceptibility/immunity to class Z2.
+Two on-chain probes empirically verify variant susceptibility per attack class:
+
+- **Class Z2 (griefing)** — CTV/CCV/OP_VAULT adapters expose `attempt_permissionless_recovery(state)`, which forges a wrong-key signature and broadcasts. ACCEPTED on keyless variants; REJECTED at script verification on key-gated variants. Wired as Phase 1 of `recovery_griefing`.
+- **Class Z5 (cold-key destination redirection)** — CAT+CSFS only, since the b-axis is the relevant one for that opcode. `cat_csfs_cold_key_recovery` Phase 2 attempts a cold-key sweep to an attacker address; ACCEPTED on the unbound reference, REJECTED on the bound variant (the dual-bind cold leaf binds the destination via CSFS+CAT).
 
 #### Implementation notes
 

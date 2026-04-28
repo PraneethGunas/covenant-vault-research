@@ -206,11 +206,19 @@ Registered variants:
 | OP\_VAULT | `opvault`, `opvault-keyless`, `opvault-atomic`, `opvault-keyless-atomic` |
 | CAT+CSFS  | `cat_csfs`, `cat_csfs-bound` |
 
-Each adapter exposes `attempt_permissionless_recovery(state)`, which builds a
-recovery transaction without the auth key and broadcasts it. The on-chain
-outcome (ACCEPTED on keyless variants, REJECTED at script verification on
-key-gated variants) is the empirical proof of class-Z2 susceptibility/immunity
-per variant.
+Each variant's susceptibility to its predicted attack class is empirically
+verified on chain.
+
+- **Class Z2 (recovery griefing)** — CTV / CCV / OP_VAULT adapters expose
+  `attempt_permissionless_recovery(state)`: builds a recovery transaction
+  with a forged wrong-key signature and broadcasts it. ACCEPTED on every
+  keyless variant; REJECTED at script verification on every key-gated
+  variant. The probe runs as Phase 1 of `recovery_griefing`.
+- **Class Z5 (cold-key destination redirection)** — CAT+CSFS only.
+  `cat_csfs_cold_key_recovery` Phase 2 attempts a cold-key sweep to an
+  attacker address. ACCEPTED on the unbound reference; REJECTED at script
+  verification on the bound variant (the dual-bind cold leaf commits
+  to the recovery output's `sha_single_output`).
 
 ## Experiments
 
