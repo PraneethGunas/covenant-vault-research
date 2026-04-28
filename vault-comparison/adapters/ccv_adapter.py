@@ -62,6 +62,17 @@ def _hash_to_hex(h) -> str:
 
 class CCVAdapter(VaultAdapter):
 
+    # Variants on the (f, a, g, b) lattice. CCV's fee model is f_inval
+    # (per-input invalidation via SIGHASH); a and g are vault-construction
+    # choices via has_partial_revault and has_keygated_recover clauses.
+    VARIANTS = {
+        "reference":       ("inval", "partial", "keyless", "bound"),
+        "atomic":          ("inval", "atomic",  "keyless", "bound"),  # post-MES anchor
+        "keygated":        ("inval", "partial", "key",     "bound"),
+        "keygated-atomic": ("inval", "atomic",  "key",     "bound"),  # MES anchor
+    }
+    REFERENCE_VARIANT = "reference"
+
     @property
     def name(self) -> str:
         return "ccv"
@@ -74,9 +85,10 @@ class CCVAdapter(VaultAdapter):
     def description(self) -> str:
         return "CCV+CTV vault (BIP 443 + BIP 119) via pymatt"
 
-    def setup(self, rpc: RegTestRPC, locktime: int = 10, **kwargs) -> None:
+    def setup(self, rpc: RegTestRPC, locktime: int = 10, variant: str = "", **kwargs) -> None:
         self.rpc = rpc
         self.locktime = locktime
+        self.variant = variant or self._default_variant()
         self._mods = _ensure_ccv_imports()
 
         # Key material (same as test_vault.py and attack common.py)
@@ -88,6 +100,21 @@ class CCVAdapter(VaultAdapter):
             "tprv8ZgxMBicQKsPeDvaW4xxmiMXxqakLgvukT8A5GR6mRwBwjsDJV1jcZab8mxS"
             "erNcj22YPrusm2Pz5oR8LTw9GqpWT51VexTNBzxxm49jCZZ"
         )
+        # Distinct authorisation key for the keygated variants (held by
+        # the "operator" role; recover_pk remains the destination key).
+        self.recover_auth_priv_key = self._mods["key"].ExtendedKey.deserialize(
+            "tprv8ZgxMBicQKsPdK8mGjZSnJxmWspAzuyx9CB6r5fGo48QEoTmS2YN3LJBpJxz"
+            "QKKKcK6gUfDXR8Z5pJZHj2C2EvLGwLwKpUZA3LwDS3pa9oC"
+        )
+
+        # Variant axis decoding: keygated variants need recover_auth_pk;
+        # atomic variants drop the partial-revault clause.
+        _, axis_amount, axis_gating, _ = self.axes()
+        recover_auth_pk = (
+            self.recover_auth_priv_key.pubkey[1:]
+            if axis_gating == "key" else None
+        )
+        has_partial_revault = (axis_amount == "partial")
 
         # Build the vault contract
         self.vault_contract = self._mods["Vault"](
@@ -95,6 +122,8 @@ class CCVAdapter(VaultAdapter):
             self.locktime,
             self.recover_priv_key.pubkey[1:],
             self.unvault_priv_key.pubkey[1:],
+            has_partial_revault=has_partial_revault,
+            recover_auth_pk=recover_auth_pk,
         )
 
         # Connect the pymatt AuthServiceProxy (it uses its own RPC client)
@@ -111,6 +140,12 @@ class CCVAdapter(VaultAdapter):
             self._pymatt_rpc, mine_automatically=True, poll_interval=0.01
         )
         self._signer = self._mods["SchnorrSigner"](self.unvault_priv_key)
+        # Recovery-authorisation signer for the keygated variants; falls
+        # back to None for the keyless reference.
+        self._recover_auth_signer = (
+            self._mods["SchnorrSigner"](self.recover_auth_priv_key)
+            if recover_auth_pk is not None else None
+        )
 
         # Track CTV templates for withdrawal
         self._ctv_templates = {}
@@ -210,7 +245,13 @@ class CCVAdapter(VaultAdapter):
         )
 
     def recover(self, state) -> TxRecord:
-        """Execute emergency recovery (no key needed — just out_i)."""
+        """Execute emergency recovery.
+
+        Reference (keyless): no signature; witness is just out_i.
+        Keygated variant: additionally requires a Schnorr sig from
+        recover_auth_pk. The signer was set up in setup() based on the
+        active variant.
+        """
         if isinstance(state, VaultState):
             instance = state.extra["instance"]
             amount = state.amount_sats
@@ -220,7 +261,10 @@ class CCVAdapter(VaultAdapter):
         else:
             raise ValueError(f"Cannot recover from {type(state)}")
 
-        instance("recover")(out_i=0)
+        if self._recover_auth_signer is not None:
+            instance("recover", signer=self._recover_auth_signer)(out_i=0)
+        else:
+            instance("recover")(out_i=0)
 
         txid = _hash_to_hex(instance.spending_tx.hash) if instance.spending_tx else ""
 
@@ -229,6 +273,42 @@ class CCVAdapter(VaultAdapter):
             label="recover",
             amount_sats=amount,
         )
+
+    def attempt_permissionless_recovery(self, state) -> str:
+        """Attacker without the recover-auth key tries to fire recovery.
+
+        Returns the broadcast result. On keyless variants the broadcast
+        succeeds. On key-gated variants the chain rejects at script
+        verification (OP_CHECKSIGVERIFY).
+
+        The "attacker" signer returns a deterministic 64-byte dummy
+        signature for any pubkey, so witness assembly succeeds and the
+        actual chain-level Schnorr verification can fail.
+        """
+        if isinstance(state, (VaultState, UnvaultState)):
+            instance = state.extra["instance"]
+        else:
+            raise ValueError(f"Cannot recover from {type(state)}")
+
+        if self._recover_auth_signer is None:
+            # Keyless reference: no signer needed, witness has no sig.
+            try:
+                instance("recover")(out_i=0)
+                return "ACCEPTED"
+            except Exception as e:
+                return f"REJECTED: {str(e)[:120]}"
+
+        # Key-gated variant: forge a 64-byte signature so witness assembly
+        # completes; the chain rejects at OP_CHECKSIGVERIFY.
+        class _DummySigner:
+            def sign(self_, msg, pubkey):
+                return b"\x00" * 64
+
+        try:
+            instance("recover", signer=_DummySigner())(out_i=0)
+            return "ACCEPTED"
+        except Exception as e:
+            return f"REJECTED: {str(e)[:140]}"
 
     def recover_batched(self, states: List) -> TxRecord:
         """Batched recovery: N Vault/Unvaulting UTXOs spent into one output.
@@ -312,7 +392,8 @@ class CCVAdapter(VaultAdapter):
         }
 
     def supports_revault(self) -> bool:
-        return True
+        # Atomic variants drop the trigger_and_revault clause.
+        return self.axes()[1] == "partial"
 
     def supports_batched_trigger(self) -> bool:
         return True
@@ -322,7 +403,7 @@ class CCVAdapter(VaultAdapter):
         return True
 
     def supports_keyless_recovery(self) -> bool:
-        return True  # recover clause requires no signature
+        return self.axes()[2] == "keyless"
 
     # ── Revault ──────────────────────────────────────────────────────
 

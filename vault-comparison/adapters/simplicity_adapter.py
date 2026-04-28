@@ -90,6 +90,13 @@ def discover_simplex_ports():
 class SimplicityAdapter(VaultAdapter):
     """Simplicity vault on Elements regtest via jet-based covenant enforcement."""
 
+    # Simplicity occupies the MES anchor by construction (g_key, b_bound,
+    # a_atomic, dynamic fees). Cross-substrate reference; not on Bitcoin.
+    VARIANTS = {
+        "reference": ("dynamic", "atomic", "key", "bound"),  # MES anchor
+    }
+    REFERENCE_VARIANT = "reference"
+
     # ── Identity ──────────────────────────────────────────────
 
     @property

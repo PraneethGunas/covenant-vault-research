@@ -84,6 +84,17 @@ def _ensure_opvault_imports():
 
 class OPVaultAdapter(VaultAdapter):
 
+    # Variants on the (f, a, g, b) lattice. BIP-345 specifies both
+    # authorised (g_key) and unauthorised (g_keyless) recovery as
+    # first-class modes; the atomic variant drops the revault leaf.
+    VARIANTS = {
+        "reference":        ("wallet", "partial", "key",     "bound"),
+        "keyless":          ("wallet", "partial", "keyless", "bound"),
+        "atomic":           ("wallet", "atomic",  "key",     "bound"),  # MES anchor
+        "keyless-atomic":   ("wallet", "atomic",  "keyless", "bound"),  # post-MES anchor
+    }
+    REFERENCE_VARIANT = "reference"
+
     @property
     def name(self) -> str:
         return "opvault"
@@ -97,10 +108,11 @@ class OPVaultAdapter(VaultAdapter):
         return "OP_VAULT vault (BIP 345 + BIP 119) via jamesob/opvault-demo"
 
     def setup(self, rpc: RegTestRPC, block_delay: int = 10,
-              seed: bytes = b"compare", **kwargs) -> None:
+              seed: bytes = b"compare", variant: str = "", **kwargs) -> None:
         self.rpc = rpc
         self.block_delay = block_delay
         self.seed = seed
+        self.variant = variant or self._default_variant()
         self._vault_counter = 0
         self.ov = _ensure_opvault_imports()
 
@@ -238,12 +250,17 @@ class OPVaultAdapter(VaultAdapter):
         recoveryauth_key = self.ov.recoveryauth_phrase_to_key("changeme2")
         recoveryauth_pubkey = recoveryauth_key.get_pubkey().get_bytes()[1:]  # x-only
 
+        # Variant -> (recovery_mode, atomic-flag) mapping. The atomic
+        # variants additionally restrict the trigger template so the
+        # withdraw output covers full vault value with no revault leg.
+        recovery_mode = "authorised" if self.axes()[2] == "key" else "unauthorised"
         config = self.ov.VaultConfig(
             spend_delay=self.block_delay,
             recovery_pubkey=recovery_pubkey,
             recoveryauth_pubkey=recoveryauth_pubkey,
             trigger_xpub=trig32.get_xpub(),
             birthday_height=0,
+            recovery_mode=recovery_mode,
         )
 
         # Save config to temp file (required by upstream load())
@@ -560,7 +577,16 @@ class OPVaultAdapter(VaultAdapter):
             config, self._fee_wallet, utxos, recoveryauth_signer
         )
 
-        self._ov_rpc.sendrawtransaction(recovery_spec.tx.tohex())
+        if recovery_spec.cpfp_child is not None:
+            # BIP-345 unauthorised recovery: parent is zero-fee with an
+            # ephemeral anchor; CPFP child carries the package fee.
+            # submitpackage requires both txs in topological order.
+            parent_hex = recovery_spec.tx.tohex()
+            child_hex = recovery_spec.cpfp_child.tohex()
+            res = self._ov_rpc.submitpackage([parent_hex, child_hex])
+            self._check_submitpackage(res)
+        else:
+            self._ov_rpc.sendrawtransaction(recovery_spec.tx.tohex())
 
         # Mine to confirm
         self._ov_rpc.generatetoaddress(1, self._fee_wallet.fee_addr)
@@ -570,6 +596,60 @@ class OPVaultAdapter(VaultAdapter):
             label="recover",
             amount_sats=state.amount_sats,
         )
+
+    def attempt_permissionless_recovery(self, state) -> str:
+        """Attacker without the recoveryauth key tries to fire recovery.
+
+        Reference variant: forges a wrong-key Schnorr signature; the chain
+        rejects via OP_CHECKSIGVERIFY in the recover script.
+        Keyless variant: no signature required; broadcast succeeds (the
+        unauthorised mode admits permissionless recovery by design).
+        """
+        config = state.extra["config"]
+        monitor = state.extra["monitor"]
+        chain_state = monitor.rescan()
+        target_txid = state.unvault_txid if isinstance(state, UnvaultState) else state.vault_txid
+        pool = chain_state.trigger_utxos if isinstance(state, UnvaultState) else chain_state.vault_utxos
+        utxos = [u for u in pool.values()
+                 if hasattr(u, "outpoint") and target_txid in str(u.outpoint)]
+        assert utxos, "Could not locate UTXO for permissionless-recovery probe"
+
+        from verystable import core
+        # Attacker has a fresh, unrelated private key — NOT the recoveryauth key.
+        attacker_priv = core.key.ECKey()
+        attacker_priv.set(b"\x33" * 32, True)
+        attacker_priv_bytes = attacker_priv.get_bytes()
+
+        def attacker_signer(msg: bytes) -> bytes:
+            return core.key.sign_schnorr(attacker_priv_bytes, msg)
+
+        self._ensure_fee_utxos()
+        try:
+            spec = self.ov.get_recovery_tx(config, self._fee_wallet, utxos, attacker_signer)
+            if spec.cpfp_child is not None:
+                res = self._ov_rpc.submitpackage([spec.tx.tohex(), spec.cpfp_child.tohex()])
+                self._check_submitpackage(res)
+            else:
+                self._ov_rpc.sendrawtransaction(spec.tx.tohex())
+            self._ov_rpc.generatetoaddress(1, self._fee_wallet.fee_addr)
+            return "ACCEPTED"
+        except Exception as e:
+            return f"REJECTED: {str(e)[:120]}"
+
+    @staticmethod
+    def _check_submitpackage(result) -> None:
+        """Raise if any tx in the package failed to enter the mempool."""
+        if not isinstance(result, dict):
+            return
+        if result.get("package_msg") and result["package_msg"] != "success":
+            raise RuntimeError(
+                f"submitpackage failed: {result['package_msg']}: "
+                f"tx-results={result.get('tx-results')}"
+            )
+        for txid, info in (result.get("tx-results") or {}).items():
+            err = info.get("error") if isinstance(info, dict) else None
+            if err:
+                raise RuntimeError(f"submitpackage tx {txid} error: {err}")
 
     # ------------------------------------------------------------------
     # Internals & Capabilities
@@ -673,10 +753,10 @@ class OPVaultAdapter(VaultAdapter):
     def supports_revault(self) -> bool:
         """OP_VAULT supports partial withdrawal with revault.
 
-        The start_withdrawal() function automatically creates a revault
-        output when the vault UTXOs exceed the destination amount.
+        Atomic variants disable revaulting at the adapter level so the
+        withdraw template covers full vault value.
         """
-        return True
+        return self.axes()[1] == "partial"
 
     def supports_batched_recovery(self) -> bool:
         """BIP-345 §"Batching" lines 613–621 authorized-recovery batching."""
@@ -882,12 +962,9 @@ class OPVaultAdapter(VaultAdapter):
         )
 
     def supports_keyless_recovery(self) -> bool:
-        """OP_VAULT uses authorized recovery (recoveryauth key required).
-
-        BIP-345 supports both modes, but the default configuration requires
-        a recoveryauth signature to prevent fee-griefing of recovery txns.
-        """
-        return False
+        # BIP-345 supports both authorised (g_key) and unauthorised
+        # (g_keyless) modes; the active variant selects which.
+        return self.axes()[2] == "keyless"
 
     # ------------------------------------------------------------------
     # Metrics collection

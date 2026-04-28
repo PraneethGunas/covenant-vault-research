@@ -6,10 +6,18 @@ against this interface and run against any adapter.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List, Optional, Tuple
 
 from harness.rpc import RegTestRPC
 from harness.metrics import TxMetrics
+
+
+# Canonical four-axis design-space tuple used by §3 of the thesis/paper.
+#  f: fee model         — "anchor" | "wallet" | "inval" | "acp"
+#  a: amount policy     — "atomic" | "partial"
+#  g: recovery gating   — "key" | "keyless"
+#  b: recovery binding  — "bound" | "unbound"
+AxisTuple = Tuple[str, str, str, str]
 
 
 @dataclass
@@ -42,6 +50,19 @@ class UnvaultState:
 class VaultAdapter(ABC):
     """Interface that every covenant vault adapter must implement."""
 
+    # Variant registry. Subclasses override to enumerate implementable
+    # variants and the (f, a, g, b) tuple each variant occupies. The first
+    # entry is the reference variant; its key is also accepted as the empty
+    # default. Keys are the canonical variant ids used in result reports.
+    VARIANTS: ClassVar[Dict[str, AxisTuple]] = {}
+
+    # Reference variant id; defaults to the first key of VARIANTS.
+    REFERENCE_VARIANT: ClassVar[Optional[str]] = None
+
+    # Selected variant for this adapter instance. Set in __init__ subclasses
+    # or via the `variant` kwarg threaded by the runner.
+    variant: str = ""
+
     # ── Identity ─────────────────────────────────────────────────────
 
     @property
@@ -49,6 +70,35 @@ class VaultAdapter(ABC):
     def name(self) -> str:
         """Short identifier: 'ctv', 'ccv', 'opvault', 'cat_csfs'."""
         ...
+
+    @property
+    def variant_id(self) -> str:
+        """Canonical id used in result keys: '<name>' for reference, '<name>-<variant>' otherwise."""
+        v = self.variant or self.REFERENCE_VARIANT or self._default_variant()
+        if not v or v == self._default_variant():
+            return self.name
+        return f"{self.name}-{v}"
+
+    @classmethod
+    def list_variants(cls) -> List[str]:
+        """All variant keys this adapter knows how to construct."""
+        return list(cls.VARIANTS.keys())
+
+    @classmethod
+    def _default_variant(cls) -> str:
+        if cls.REFERENCE_VARIANT:
+            return cls.REFERENCE_VARIANT
+        return next(iter(cls.VARIANTS), "")
+
+    def axes(self) -> AxisTuple:
+        """Return the (f, a, g, b) tuple this adapter+variant occupies."""
+        v = self.variant or self._default_variant()
+        if v not in self.VARIANTS:
+            raise ValueError(
+                f"{self.name}: variant {v!r} not in registry "
+                f"{list(self.VARIANTS)}"
+            )
+        return self.VARIANTS[v]
 
     @property
     @abstractmethod
@@ -165,7 +215,7 @@ class VaultAdapter(ABC):
 
     def capabilities(self) -> dict:
         """Programmatic capability discovery for experiments and agents."""
-        return {
+        caps = {
             "revault": self.supports_revault(),
             "batched_trigger": self.supports_batched_trigger(),
             "batched_recovery": self.supports_batched_recovery(),
@@ -173,6 +223,17 @@ class VaultAdapter(ABC):
             "max_batch_size": None,
             "recovery_requires_key": not self.supports_keyless_recovery(),
         }
+        if self.VARIANTS:
+            f, a, g, b = self.axes()
+            caps.update({
+                "variant": self.variant or self._default_variant(),
+                "variant_id": self.variant_id,
+                "axis_fee": f,
+                "axis_amount": a,
+                "axis_gating": g,
+                "axis_binding": b,
+            })
+        return caps
 
     # ── Capabilities ─────────────────────────────────────────────────
 

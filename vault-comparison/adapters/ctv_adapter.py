@@ -14,6 +14,14 @@ from config import CFG
 
 class CTVAdapter(VaultAdapter):
 
+    # Variants on the (f, a, g, b) lattice. CTV is locked at f_anchor by
+    # template rigidity (see Lemma anchor_pinning); only g varies.
+    VARIANTS = {
+        "reference":  ("anchor", "atomic", "keyless", "bound"),
+        "keygated":   ("anchor", "atomic", "key",     "bound"),
+    }
+    REFERENCE_VARIANT = "reference"
+
     @property
     def name(self) -> str:
         return "ctv"
@@ -26,10 +34,12 @@ class CTVAdapter(VaultAdapter):
     def description(self) -> str:
         return "CTV-only vault (BIP 119) via simple-ctv-vault"
 
-    def setup(self, rpc: RegTestRPC, block_delay: int = 10, seed: bytes = b"compare", **kwargs) -> None:
+    def setup(self, rpc: RegTestRPC, block_delay: int = 10, seed: bytes = b"compare",
+              variant: str = "", **kwargs) -> None:
         self.rpc = rpc
         self.block_delay = block_delay
         self.seed = seed
+        self.variant = variant or self._default_variant()
         self._vault_counter = 0
 
         # Load upstream modules via module_loader
@@ -87,6 +97,7 @@ class CTVAdapter(VaultAdapter):
             self.fee_wallet.privkey.point,
             coin,
             block_delay=self.block_delay,
+            variant=self.variant,
         )
         executor = self.ctv_main.VaultExecutor(plan, self._ctv_rpc, coin)
 
@@ -145,7 +156,8 @@ class CTVAdapter(VaultAdapter):
             tx = executor.get_tohot_tx(self.hot_wallet.privkey)
             label = "tohot"
         else:
-            tx = executor.get_tocold_tx()
+            cold_priv = self.cold_wallet.privkey if self.variant == "keygated" else None
+            tx = executor.get_tocold_tx(cold_priv)
             label = "tocold"
 
         tx_hex = tx.serialize().hex()
@@ -169,6 +181,40 @@ class CTVAdapter(VaultAdapter):
             return self.complete_withdrawal(state, path="cold")
         raise ValueError("CTV recovery only available from unvault state (cold sweep)")
 
+    def attempt_permissionless_recovery(self, state) -> str:
+        """Attacker without the cold key tries to fire the tocold sweep.
+
+        Reference variant: cold leaf is bare CTV, no signature required —
+        broadcast succeeds (keyless griefing surface).
+        Keygated variant: cold leaf requires <cold_pubkey> CHECKSIGVERIFY
+        before the CTV check; an attacker without the cold key supplies a
+        forged signature and the chain rejects.
+        """
+        if not isinstance(state, UnvaultState):
+            raise ValueError("CTV permissionless probe only valid from unvault state")
+        plan = state.extra["plan"]
+        executor = state.extra["executor"]
+
+        if self.variant == "keygated":
+            from buidl.ecc import PrivateKey as _PrivKey
+            attacker_priv = _PrivKey(secret=int.from_bytes(b"\x77" * 32, "big") or 1)
+            try:
+                tx = executor.get_tocold_tx(attacker_priv)
+                self._ctv_rpc.sendrawtransaction(tx.serialize().hex())
+                self.ctv_main.generateblocks(self._ctv_rpc, 1)
+                return "ACCEPTED"
+            except Exception as e:
+                return f"REJECTED: {str(e)[:120]}"
+
+        # Reference (keyless): no key needed; the same call succeeds.
+        try:
+            tx = executor.get_tocold_tx()
+            self._ctv_rpc.sendrawtransaction(tx.serialize().hex())
+            self.ctv_main.generateblocks(self._ctv_rpc, 1)
+            return "ACCEPTED"
+        except Exception as e:
+            return f"REJECTED: {str(e)[:120]}"
+
     # ── Internals & Capabilities ────────────────────────────────────
 
     def get_internals(self) -> dict:
@@ -190,7 +236,8 @@ class CTVAdapter(VaultAdapter):
         return False
 
     def supports_keyless_recovery(self) -> bool:
-        return False
+        # Reference variant is keyless; keygated requires cold sig.
+        return self.axes()[2] == "keyless"
 
     # ── Metrics enrichment ───────────────────────────────────────────
 

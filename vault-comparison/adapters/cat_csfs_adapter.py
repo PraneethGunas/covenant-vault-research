@@ -17,6 +17,23 @@ from config import CFG
 
 class CATCSFSAdapter(VaultAdapter):
 
+    # Variants on the (f, a, g, b) lattice. The reference cold leaf is a
+    # bare CHECKSIG (b_unbound). The bound variant uses CSFS+CAT to commit
+    # the cold-key signature to the recovery output script (Poelstra
+    # dual-bind; reaches the MES anchor modulo f_acp).
+    #
+    # A "keyless-bound" variant is NOT constructible on CAT+CSFS alone: a
+    # CSFS-only cold leaf (without OP_CHECKSIG) does not bind the spending
+    # tx to the recovery template — pure CSFS verifies a hash on bytes the
+    # witness provides, which is detached from the actual tx's sighash.
+    # Reaching post-MES on CAT+CSFS requires CTV-equivalent template
+    # enforcement, which is out of scope for the four-axis framework.
+    VARIANTS = {
+        "reference":      ("acp", "atomic", "key", "unbound"),
+        "bound":          ("acp", "atomic", "key", "bound"),    # MES anchor (modulo f_acp)
+    }
+    REFERENCE_VARIANT = "reference"
+
     @property
     def name(self) -> str:
         return "cat_csfs"
@@ -29,10 +46,12 @@ class CATCSFSAdapter(VaultAdapter):
     def description(self) -> str:
         return "CAT+CSFS vault (BIP 347 + BIP 348) via simple-cat-csfs-vault"
 
-    def setup(self, rpc: RegTestRPC, block_delay: int = 10, seed: bytes = b"compare", **kwargs) -> None:
+    def setup(self, rpc: RegTestRPC, block_delay: int = 10, seed: bytes = b"compare",
+              variant: str = "", **kwargs) -> None:
         self.rpc = rpc
         self.block_delay = block_delay
         self.seed = seed
+        self.variant = variant or self._default_variant()
         self._vault_counter = 0
 
         # Load upstream modules via module_loader
@@ -82,6 +101,8 @@ class CATCSFSAdapter(VaultAdapter):
         """Fund a wallet, then create a vault of the specified amount."""
         coin, from_wallet = self._pool.fund(amount_sats, seed=self._unique_seed())
 
+        # Map adapter variant to upstream VaultPlan.variant.
+        upstream_variant = "bound" if self.variant == "bound" else "reference"
         plan = self.cat_vault.VaultPlan(
             hot_wallet=self.hot_wallet,
             cold_wallet=self.cold_wallet,
@@ -89,6 +110,7 @@ class CATCSFSAdapter(VaultAdapter):
             fee_wallet=self.fee_wallet,
             coin_in=coin,
             block_delay=self.block_delay,
+            variant=upstream_variant,
         )
         executor = self.cat_vault.VaultExecutor(plan, self._cat_rpc)
 
@@ -222,7 +244,9 @@ class CATCSFSAdapter(VaultAdapter):
         return False
 
     def supports_keyless_recovery(self) -> bool:
-        return False  # Requires cold key signature
+        # Both registered CAT+CSFS variants are key-gated. A keyless-bound
+        # variant is not structurally constructible (see VARIANTS docstring).
+        return self.axes()[2] == "keyless"
 
     # ── Metrics enrichment ───────────────────────────────────────────
 

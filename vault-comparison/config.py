@@ -56,6 +56,45 @@ class FeeConstants:
             "recover": getattr(self, f"{prefix}_recover_vsize"),
         }
 
+    def for_variant(self, variant_id: str) -> Dict[str, int]:
+        """Get vsize constants for a specific (covenant, variant) pair.
+
+        ``variant_id`` is the canonical id from the adapter
+        (``adapter.variant_id``): e.g. ``"opvault"`` for the reference,
+        ``"opvault-keyless"`` for the unauthorised mode, etc.
+
+        Variants share tovault/trigger/withdraw vsizes with their
+        reference; only the recover-tx vsize differs (per the regtest
+        measurements documented in DESIGN.md §3.8).
+        """
+        # Normalise: drop reference-equivalents, parse opcode + variant suffix
+        if variant_id == "reference" or "-" not in variant_id:
+            return self.for_covenant(variant_id)
+
+        # Split off the opcode and the variant suffix
+        parts = variant_id.split("-", 1)
+        if len(parts) != 2:
+            return self.for_covenant(variant_id)
+        covenant, variant = parts
+        base = self.for_covenant(covenant)
+
+        # Per-variant recover-tx vsize deltas (regtest-measured).
+        # Other lifecycle vsizes are unchanged across variants.
+        recover_overrides = {
+            ("ctv", "keygated"):                 160,
+            ("ccv", "atomic"):                   122,
+            ("ccv", "keygated"):                 147,
+            ("ccv", "keygated-atomic"):          147,
+            ("opvault", "keyless"):              131,
+            ("opvault", "atomic"):               246,
+            ("opvault", "keyless-atomic"):       131,
+            ("cat_csfs", "bound"):               209,
+        }
+        if (covenant, variant) in recover_overrides:
+            base = dict(base)
+            base["recover"] = recover_overrides[(covenant, variant)]
+        return base
+
 
 @dataclass(frozen=True)
 class FrameworkConfig:

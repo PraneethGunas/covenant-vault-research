@@ -42,10 +42,23 @@ class MockAdapter(VaultAdapter):
         supports:       dict of capability overrides
     """
 
+    # MockAdapter participates in the variant registry so experiments
+    # that dispatch on adapter.axes() can be unit-tested. The reference
+    # mock variant is at the post-MES anchor by default; tests that need
+    # other axis values pass `variant=` to setup() or override `supports`.
+    VARIANTS = {
+        "reference": ("dynamic", "atomic", "keyless", "bound"),
+        "keygated":  ("dynamic", "atomic", "key",     "bound"),
+        "partial":   ("dynamic", "partial", "keyless", "bound"),
+        "unbound":   ("dynamic", "atomic", "key",     "unbound"),
+    }
+    REFERENCE_VARIANT = "reference"
+
     def __init__(self, vault_amount=100_000, supports=None):
         self._vault_amount = vault_amount
         self._counter = 0
         self._supports = supports or {}
+        self.variant = self._default_variant()
 
     @property
     def name(self) -> str:
@@ -59,9 +72,11 @@ class MockAdapter(VaultAdapter):
     def description(self) -> str:
         return "Mock adapter for testing"
 
-    def setup(self, rpc, block_delay=10, **kwargs):
+    def setup(self, rpc, block_delay=10, variant: str = "", **kwargs):
         self.rpc = rpc
         self.block_delay = block_delay
+        if variant:
+            self.variant = variant
 
     def create_vault(self, amount_sats):
         self._counter += 1
@@ -142,4 +157,12 @@ def mock_adapter(mock_rpc):
 def mock_adapter_with_revault(mock_rpc):
     adapter = MockAdapter(supports={"revault": True, "batched_trigger": True})
     adapter.setup(mock_rpc)
+    return adapter
+
+
+@pytest.fixture(params=list(MockAdapter.VARIANTS.keys()))
+def mock_adapter_variant(request, mock_rpc):
+    """Parametrised fixture: yields a MockAdapter for each registered variant."""
+    adapter = MockAdapter()
+    adapter.setup(mock_rpc, variant=request.param)
     return adapter

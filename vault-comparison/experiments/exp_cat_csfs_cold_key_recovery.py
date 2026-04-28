@@ -300,11 +300,10 @@ def _run_cold_key_recovery(adapter, result):
     except Exception as e:
         err_str = str(e)
         result.observe(f"REJECTED: {err_str[:200]}")
-        result.observe(
-            "UNEXPECTED: Cold key recovery with attacker output was rejected.  "
-            "This contradicts the expected behavior of OP_CHECKSIG."
-        )
-        result.error = f"Cold key redirection rejected: {err_str[:100]}"
+        # On b_bound the recover leaf binds the destination — rejection is
+        # the expected on-chain outcome, not an experiment failure.
+        if adapter.axes()[3] != "bound":
+            result.error = f"Cold key redirection rejected: {err_str[:100]}"
 
     # ── Phase 3: Recovery timing analysis ─────────────────────────────
     result.observe("")

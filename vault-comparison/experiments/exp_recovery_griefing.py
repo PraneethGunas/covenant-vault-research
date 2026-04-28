@@ -215,7 +215,16 @@ def _run_ctv_griefing(adapter, result, rpc):
     trigger_vsize = unvault_info.get("vsize", 0)
     result.observe(f"Unvault tx (attacker's cost): {trigger_vsize} vB")
 
-    # Defender sweeps to cold
+    # Permissionless-attacker probe: attacker (without cold key) tries to
+    # fire the tocold sweep. Reference variant (keyless cold leaf) accepts;
+    # keygated variant rejects via OP_CHECKSIGVERIFY in the cold leaf.
+    if hasattr(adapter, "attempt_permissionless_recovery"):
+        probe_vault = adapter.create_vault(VAULT_AMOUNT)
+        probe_unvault = adapter.trigger_unvault(probe_vault)
+        probe_outcome = adapter.attempt_permissionless_recovery(probe_unvault)
+        result.observe(f"Permissionless-recovery probe: {probe_outcome}")
+
+    # Defender sweeps to cold (legitimate, with cold key on keygated variant)
     cold_record = adapter.recover(unvault)
     cold_metrics = adapter.collect_tx_metrics(cold_record, rpc)
     cold_vsize = cold_metrics.vsize or 0
@@ -361,6 +370,17 @@ def _run_trigger_recover_griefing(adapter, result, rpc):
     trigger_vsize = trigger_metrics.vsize or 0
     result.observe(f"Trigger tx: {unvault.unvault_txid[:16]}... ({trigger_vsize} vB)")
     result.add_tx(trigger_metrics)
+
+    # Permissionless-attacker probe: attempt recovery WITHOUT the auth key.
+    # On keyless variants this succeeds; on key-gated variants the chain
+    # rejects via OP_CHECKSIGVERIFY. The on-chain outcome is the empirical
+    # proof of class \classgrief{} susceptibility/immunity.
+    if hasattr(adapter, "attempt_permissionless_recovery"):
+        # Need a fresh state because the probe consumes the unvault if accepted.
+        probe_vault = adapter.create_vault(VAULT_AMOUNT)
+        probe_unvault = adapter.trigger_unvault(probe_vault)
+        probe_outcome = adapter.attempt_permissionless_recovery(probe_unvault)
+        result.observe(f"Permissionless-recovery probe: {probe_outcome}")
 
     recover_record = adapter.recover(unvault)
     recover_metrics = adapter.collect_tx_metrics(recover_record, rpc)

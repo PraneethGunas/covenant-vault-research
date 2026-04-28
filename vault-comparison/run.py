@@ -295,7 +295,8 @@ class _Spinner:
 
 
 def run_experiment(name: str, covenant: str, rpc: RegTestRPC,
-                   adapter=None, verbose: bool = False) -> ExperimentResult:
+                   adapter=None, verbose: bool = False,
+                   variant: str = "") -> ExperimentResult:
     """Run a single experiment against a single covenant.
 
     If `adapter` is provided, reuses it (preserving the coin pool).
@@ -312,7 +313,7 @@ def run_experiment(name: str, covenant: str, rpc: RegTestRPC,
 
     if adapter is None:
         adapter = get_adapter(covenant)
-        adapter.setup(rpc)
+        adapter.setup(rpc, variant=variant) if variant else adapter.setup(rpc)
 
     # Show a spinner while the experiment runs
     cov_upper = adapter.name.upper()
@@ -322,6 +323,10 @@ def run_experiment(name: str, covenant: str, rpc: RegTestRPC,
         result = spec.run_fn(adapter)
     finally:
         spinner.stop()
+
+    # Backfill variant from adapter (experiments that don't set it explicitly).
+    if hasattr(adapter, "variant") and adapter.variant:
+        result.variant = adapter.variant
 
     # ── Console output ─────────────────────────────────────────
     cov_label = _cyan(adapter.name.upper().ljust(11))
@@ -450,58 +455,74 @@ def cmd_run(args):
 
     # Run each covenant in sequence.  When auto-switching is enabled,
     # each covenant gets its own node + fresh regtest + fresh adapter.
+    requested_variant = (getattr(args, "variant", "") or "").strip()
+
     for cov in covenants:
-        if args.no_switch:
-            # Manual mode: assume correct node is already running
-            if cov == "simplicity":
-                from adapters.simplicity_adapter import discover_simplex_ports
-                rpc_port, _, rpc_user, rpc_pass = discover_simplex_ports()
-                rpc = RegTestRPC(host="127.0.0.1", port=rpc_port,
-                                 user=rpc_user, password=rpc_pass)
-            else:
-                rpc = connect_rpc()
+        # Resolve variant list for this covenant.
+        adapter_cls = type(get_adapter(cov))
+        if requested_variant == "all":
+            variants_to_run = adapter_cls.list_variants() or [""]
+        elif requested_variant:
+            variants_to_run = [requested_variant]
         else:
-            # Auto mode: switch node + init regtest
-            rpc = switch_and_init(cov, blocks=args.blocks)
+            variants_to_run = [""]  # adapter's reference variant
 
-        # Create adapter and reuse across all experiments for this covenant.
-        # This preserves the coin pool (CTV bank), avoiding repeated 101-block
-        # mining that exhausts regtest subsidy.
-        adapter = get_adapter(cov)
-        adapter.setup(rpc)
+        for variant in variants_to_run:
+            if args.no_switch:
+                # Manual mode: assume correct node is already running
+                if cov == "simplicity":
+                    from adapters.simplicity_adapter import discover_simplex_ports
+                    rpc_port, _, rpc_user, rpc_pass = discover_simplex_ports()
+                    rpc = RegTestRPC(host="127.0.0.1", port=rpc_port,
+                                     user=rpc_user, password=rpc_pass)
+                else:
+                    rpc = connect_rpc()
+            else:
+                # Auto mode: switch node + init regtest. Each variant gets
+                # a fresh chain to avoid cross-variant fee/state bleed.
+                rpc = switch_and_init(cov, blocks=args.blocks)
 
-        # Pass sweep parameters to adapter (experiments read these)
-        if args.vault_counts:
-            adapter.vault_counts = [int(x) for x in args.vault_counts.split(",")]
-        if args.max_withdrawals:
-            adapter.max_withdrawals = args.max_withdrawals
-        if getattr(args, "max_splits", None):
-            adapter.max_splits = args.max_splits
+            adapter = get_adapter(cov)
+            if variant:
+                adapter.setup(rpc, variant=variant)
+            else:
+                adapter.setup(rpc)
 
-        verbose = getattr(args, "verbose", False)
-        print(f"\n  {_dim('─'*70)}")
-        print(f"  {_bold(_cyan(cov.upper()))} {_dim('—')} {adapter.description}")
-        print(f"  {_dim('─'*70)}")
+            if args.vault_counts:
+                adapter.vault_counts = [int(x) for x in args.vault_counts.split(",")]
+            if args.max_withdrawals:
+                adapter.max_withdrawals = args.max_withdrawals
+            if getattr(args, "max_splits", None):
+                adapter.max_splits = args.max_splits
 
-        for exp_name in experiments:
-            if exp_name not in all_results:
-                all_results[exp_name] = {}
+            verbose = getattr(args, "verbose", False)
+            label = adapter.variant_id if hasattr(adapter, "variant_id") else cov
+            print(f"\n  {_dim('─'*70)}")
+            print(f"  {_bold(_cyan(label.upper()))} {_dim('—')} {adapter.description}")
+            print(f"  {_dim('─'*70)}")
 
-            try:
-                result = run_experiment(
-                    exp_name, cov, rpc, adapter=adapter, verbose=verbose
-                )
-                all_results[exp_name][cov] = result
-                reporter.save_result(result)
-            except Exception as e:
-                cov_label = _cyan(cov.upper().ljust(11))
-                exp_label = _bold(exp_name.ljust(32))
-                print(f"  {cov_label} {_dim('│')} {exp_label} {_dim('│')} {_red('CRASH')} {_dim('│')} {_red(str(e)[:60])}")
-                err_result = ExperimentResult(
-                    experiment=exp_name, covenant=cov, params={}
-                )
-                err_result.error = str(e)
-                all_results[exp_name][cov] = err_result
+            for exp_name in experiments:
+                key = adapter.variant_id if hasattr(adapter, "variant_id") else cov
+                if exp_name not in all_results:
+                    all_results[exp_name] = {}
+
+                try:
+                    result = run_experiment(
+                        exp_name, cov, rpc, adapter=adapter, verbose=verbose,
+                        variant=variant,
+                    )
+                    all_results[exp_name][key] = result
+                    reporter.save_result(result)
+                except Exception as e:
+                    cov_label = _cyan(key.upper().ljust(11))
+                    exp_label = _bold(exp_name.ljust(32))
+                    print(f"  {cov_label} {_dim('│')} {exp_label} {_dim('│')} {_red('CRASH')} {_dim('│')} {_red(str(e)[:60])}")
+                    err_result = ExperimentResult(
+                        experiment=exp_name, covenant=cov, params={},
+                        variant=variant or "reference",
+                    )
+                    err_result.error = str(e)
+                    all_results[exp_name][key] = err_result
 
     # Generate comparison reports for experiments run on multiple covenants
     for exp_name, results in all_results.items():
@@ -607,6 +628,11 @@ def main():
     sub_run.add_argument("--all", action="store_true", help="Run all experiments")
     sub_run.add_argument("--no-switch", action="store_true",
                          help="Skip node switching (assume correct node is running)")
+    sub_run.add_argument("--variant", default="",
+                         help="Variant id within the selected covenant "
+                              "(e.g. 'keygated', 'atomic', 'keyless-atomic'); "
+                              "use 'all' to sweep every registered variant. "
+                              "Defaults to the adapter's reference variant.")
     sub_run.add_argument("--blocks", type=int, default=300,
                          help="Blocks to mine during init (default: 300)")
     sub_run.add_argument("--vault-counts", type=str, default=None,

@@ -303,3 +303,138 @@ class TestCATCSFSLifecycle:
         assert not adapter.supports_revault()
         assert not adapter.supports_batched_trigger()
         assert not adapter.supports_keyless_recovery()
+
+
+# ── Variant Defences ────────────────────────────────────────────────
+#
+# These tests verify that variants flipping a defensive axis empirically
+# defend against the corresponding attack class. Each test attempts the
+# attack and asserts the on-chain outcome is rejection.
+
+@pytest.mark.integration
+class TestCATCSFSBoundDefence:
+    """cat_csfs-bound (b_bound) rejects cold-key destination redirection."""
+
+    def test_bound_rejects_redirection(self):
+        """On the bound variant the recover leaf binds the destination
+        via CSFS+CAT, so the chain rejects a redirected recovery at
+        script verification."""
+        _skip_unless_node("cat_csfs")
+        from adapters.cat_csfs_adapter import CATCSFSAdapter
+        from experiments.exp_cat_csfs_cold_key_recovery import _run_cold_key_recovery
+        from harness.metrics import ExperimentResult
+
+        rpc = _get_rpc()
+        adapter = CATCSFSAdapter()
+        adapter.setup(rpc, block_delay=10, variant="bound")
+
+        result = ExperimentResult(experiment="cat_csfs_cold_key_recovery",
+                                  covenant="cat_csfs", params={})
+        try:
+            _run_cold_key_recovery(adapter, result)
+        except Exception:
+            pass
+
+        rejected = any("REJECTED" in (o or "") for o in result.observations)
+        assert rejected, (
+            "Bound variant should record on-chain rejection of the "
+            "redirected recovery"
+        )
+        assert result.error is None, (
+            f"Bound variant unexpectedly errored: {result.error}"
+        )
+
+
+@pytest.mark.integration
+class TestCCVKeygatedDefence:
+    """ccv-keygated rejects permissionless recovery (no auth key)."""
+
+    def test_keygated_rejects_permissionless(self):
+        _skip_unless_node("ccv")
+        from adapters.ccv_adapter import CCVAdapter
+        rpc = _get_rpc()
+        adapter = CCVAdapter()
+        adapter.setup(rpc, locktime=10, variant="keygated")
+
+        vault = adapter.create_vault(VAULT_AMOUNT)
+        unvault = adapter.trigger_unvault(vault)
+        outcome = adapter.attempt_permissionless_recovery(unvault)
+        assert outcome.startswith("REJECTED"), (
+            f"keygated variant must reject permissionless recovery; got: {outcome}"
+        )
+
+    def test_reference_accepts_permissionless(self):
+        _skip_unless_node("ccv")
+        from adapters.ccv_adapter import CCVAdapter
+        rpc = _get_rpc()
+        adapter = CCVAdapter()
+        adapter.setup(rpc, locktime=10, variant="reference")
+
+        vault = adapter.create_vault(VAULT_AMOUNT)
+        unvault = adapter.trigger_unvault(vault)
+        outcome = adapter.attempt_permissionless_recovery(unvault)
+        assert outcome == "ACCEPTED", (
+            f"reference (keyless) should accept permissionless recovery; got: {outcome}"
+        )
+
+
+@pytest.mark.integration
+class TestOPVaultAuthDefence:
+    """opvault (authorised) rejects permissionless recovery; opvault-keyless
+    accepts it. Chain-level proof of class \\classgrief{} susceptibility."""
+
+    def test_authorised_rejects_permissionless(self):
+        _skip_unless_node("opvault")
+        from adapters.opvault_adapter import OPVaultAdapter
+        rpc = _get_rpc()
+        adapter = OPVaultAdapter()
+        adapter.setup(rpc, block_delay=10, variant="reference")
+
+        vault = adapter.create_vault(VAULT_AMOUNT)
+        unvault = adapter.trigger_unvault(vault)
+        outcome = adapter.attempt_permissionless_recovery(unvault)
+        assert outcome.startswith("REJECTED"), outcome
+        assert "Schnorr" in outcome or "verify" in outcome.lower(), (
+            f"expected schnorr/verify rejection on chain; got: {outcome}"
+        )
+
+    def test_keyless_accepts_permissionless(self):
+        _skip_unless_node("opvault")
+        from adapters.opvault_adapter import OPVaultAdapter
+        rpc = _get_rpc()
+        adapter = OPVaultAdapter()
+        adapter.setup(rpc, block_delay=10, variant="keyless")
+
+        vault = adapter.create_vault(VAULT_AMOUNT)
+        unvault = adapter.trigger_unvault(vault)
+        outcome = adapter.attempt_permissionless_recovery(unvault)
+        assert outcome == "ACCEPTED", outcome
+
+
+@pytest.mark.integration
+class TestCTVKeygatedDefence:
+    """ctv-keygated rejects permissionless cold sweep; ctv reference accepts."""
+
+    def test_keygated_rejects_permissionless(self):
+        _skip_unless_node("ctv")
+        from adapters.ctv_adapter import CTVAdapter
+        rpc = _get_rpc()
+        adapter = CTVAdapter()
+        adapter.setup(rpc, block_delay=10, variant="keygated")
+
+        vault = adapter.create_vault(VAULT_AMOUNT)
+        unvault = adapter.trigger_unvault(vault)
+        outcome = adapter.attempt_permissionless_recovery(unvault)
+        assert outcome.startswith("REJECTED"), outcome
+
+    def test_reference_accepts_permissionless(self):
+        _skip_unless_node("ctv")
+        from adapters.ctv_adapter import CTVAdapter
+        rpc = _get_rpc()
+        adapter = CTVAdapter()
+        adapter.setup(rpc, block_delay=10, variant="reference")
+
+        vault = adapter.create_vault(VAULT_AMOUNT)
+        unvault = adapter.trigger_unvault(vault)
+        outcome = adapter.attempt_permissionless_recovery(unvault)
+        assert outcome == "ACCEPTED", outcome

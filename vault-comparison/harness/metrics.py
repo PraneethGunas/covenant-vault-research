@@ -45,6 +45,7 @@ class ExperimentResult:
 
     experiment: str  # e.g. "lifecycle_costs"
     covenant: str  # e.g. "ctv", "ccv"
+    variant: str = "reference"  # adapter variant id (or "reference")
     timestamp: str = ""
     transactions: List[TxMetrics] = field(default_factory=list)
     observations: List[str] = field(default_factory=list)
@@ -77,6 +78,7 @@ class ExperimentResult:
         return {
             "experiment": self.experiment,
             "covenant": self.covenant,
+            "variant": self.variant,
             "timestamp": self.timestamp,
             "params": self.params,
             "transactions": [tx.to_dict() for tx in self.transactions],

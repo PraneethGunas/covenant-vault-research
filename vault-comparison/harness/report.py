@@ -39,9 +39,19 @@ class Reporter:
         return self._experiment_dirs[experiment]
 
     def save_result(self, result: ExperimentResult) -> Path:
-        """Save a single covenant's result as JSON."""
+        """Save a single covenant/variant result as JSON.
+
+        For non-reference variants the filename includes the variant id
+        so per-variant runs of the same experiment don't overwrite each
+        other (e.g. ``opvault.json`` vs ``opvault-keyless.json``).
+        """
         d = self._exp_dir(result.experiment)
-        path = d / f"{result.covenant}.json"
+        variant = (result.variant or "").strip()
+        if variant and variant != "reference":
+            filename = f"{result.covenant}-{variant}.json"
+        else:
+            filename = f"{result.covenant}.json"
+        path = d / filename
         path.write_text(result.to_json())
         return path
 

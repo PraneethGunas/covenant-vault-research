@@ -109,6 +109,7 @@ def run(adapter: VaultAdapter) -> ExperimentResult:
             )
         return result
 
+
     # Measured vsizes (filled by Phase 1)
     measured_trigger_vsize = 200  # fallback
     measured_recover_vsize = 170  # fallback
